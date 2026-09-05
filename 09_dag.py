@@ -1,9 +1,9 @@
 """Step 9: Orchestration — single Airflow DAG wiring Steps 2, 4, 5, 6, 7, 8
-into one daily run. Steps 1 (download_data.py) and 3 (profile_data.py) are
-one-time/manual, so they're intentionally left out (per PROJECT_OVERVIEW.md).
+into one daily run. Steps 1 (01_download_data.py) and 3 (03_profile_data.py)
+are one-time/manual, so they're intentionally left out (per PROJECT_OVERVIEW.md).
 
 Runs inside the airflow container (see Dockerfile.airflow), which bundles a
-JVM for transform_data.py's PySpark job and dbt for the modeling step
+JVM for 05_transform_data.py's PySpark job and dbt for the modeling step
 alongside the plain pipeline scripts.
 """
 from datetime import datetime
@@ -21,19 +21,19 @@ with DAG(
 ) as dag:
     generate_synthetic_data = BashOperator(
         task_id="generate_synthetic_data",
-        bash_command="python " + PROJECT_DIR + "/generate_synthetic_data.py --date {{ ds }}",
+        bash_command="python " + PROJECT_DIR + "/02_generate_synthetic_data.py --date {{ ds }}",
     )
     validate_data = BashOperator(
         task_id="validate_data",
-        bash_command="python " + PROJECT_DIR + "/validate_data.py",
+        bash_command="python " + PROJECT_DIR + "/04_validate_data.py",
     )
     transform_data = BashOperator(
         task_id="transform_data",
-        bash_command="python " + PROJECT_DIR + "/transform_data.py",
+        bash_command="python " + PROJECT_DIR + "/05_transform_data.py",
     )
     load_postgres = BashOperator(
         task_id="load_postgres",
-        bash_command="python " + PROJECT_DIR + "/load_postgres.py",
+        bash_command="python " + PROJECT_DIR + "/06_load_postgres.py",
     )
     dbt_run = BashOperator(
         task_id="dbt_run",
@@ -45,12 +45,12 @@ with DAG(
     )
     record_dbt_test_results = BashOperator(
         task_id="record_dbt_test_results",
-        bash_command="python " + PROJECT_DIR + "/record_dbt_test_results.py",
+        bash_command="python " + PROJECT_DIR + "/07_record_dbt_test_results.py",
         trigger_rule="all_done",
     )
     load_doris = BashOperator(
         task_id="load_doris",
-        bash_command="python " + PROJECT_DIR + "/load_doris.py",
+        bash_command="python " + PROJECT_DIR + "/08_load_doris.py",
     )
 
     (

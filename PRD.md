@@ -119,14 +119,14 @@ transform → load-postgres → dbt run/test → load-doris.
 
 | # | Component | Requirement |
 |---|---|---|
-| FR1 | `download_data.py` | Download the Kaggle dataset once via `kagglehub`; must not re-download on every run |
-| FR2 | `generate_synthetic_data.py` | Generate customers/orders/order_items/payments/deliveries for a given simulated date, anchored to real restaurant signals |
-| FR3 | `validate_data.py` | Enforce an explicit schema; reject rows failing schema or business rules (negative amounts, orphaned FKs, invalid timestamps/ratings, duplicate keys) into a quarantine file with a reason code |
-| FR4 | `transform_data.py` | PySpark job: clean types, explode `cuisines`/`rest_type`, parse `reviews_list`, derive metrics (`order_total`, `delivery_time`, `customer_order_count`, etc.) |
-| FR5 | `load_postgres.py` | Load cleaned/transformed data into Postgres staging tables |
+| FR1 | `01_download_data.py` | Download the Kaggle dataset once via `kagglehub`; must not re-download on every run |
+| FR2 | `02_generate_synthetic_data.py` | Generate customers/orders/order_items/payments/deliveries for a given simulated date, anchored to real restaurant signals |
+| FR3 | `04_validate_data.py` | Enforce an explicit schema; reject rows failing schema or business rules (negative amounts, orphaned FKs, invalid timestamps/ratings, duplicate keys) into a quarantine file with a reason code |
+| FR4 | `05_transform_data.py` | PySpark job: clean types, explode `cuisines`/`rest_type`, parse `reviews_list`, derive metrics (`order_total`, `delivery_time`, `customer_order_count`, etc.) |
+| FR5 | `06_load_postgres.py` | Load cleaned/transformed data into Postgres staging tables |
 | FR6 | dbt project | Build staging models → dimension models → fact models; enforce not-null/unique/relationship tests |
-| FR7 | `load_doris.py` | Load the finished star schema from Postgres/dbt output into Apache Doris |
-| FR8 | `dag.py` | Single Airflow DAG orchestrating FR2–FR7 daily |
+| FR7 | `08_load_doris.py` | Load the finished star schema from Postgres/dbt output into Apache Doris |
+| FR8 | `09_dag.py` | Single Airflow DAG orchestrating FR2–FR7 daily |
 | FR9 | Metabase dashboard | 4 pages: Business Overview, Customer Insights, Delivery & Operations, Pipeline Health (see `PROJECT_OVERVIEW.md` wireframe) |
 | FR10 | Pipeline health monitoring | Track and surface rows ingested, rows rejected, rejection rate, and dbt test pass/fail counts per run |
 

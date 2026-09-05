@@ -8,3 +8,5 @@ python-dotenv==1.0.1
 requests==2.32.3
 dbt-core==1.8.8
 dbt-postgres==1.8.2
+dash==2.18.2
+plotly==7.0.0

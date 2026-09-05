@@ -19,21 +19,21 @@ flowchart TD
     RAW_R["raw_restaurants.csv"]
     RAW_T["raw_orders.csv / raw_customers.csv\nraw_order_items.csv / raw_payments.csv\nraw_deliveries.csv"]
 
-    KAGGLE -->|"download_data.py (one-time seed)"| RAW_R
-    RAW_R -->|"generate_synthetic_data.py"| RAW_T
+    KAGGLE -->|"01_download_data.py (one-time seed)"| RAW_R
+    RAW_R -->|"02_generate_synthetic_data.py"| RAW_T
 
     RAW_R --> VALIDATE
-    RAW_T --> VALIDATE["validate_data.py\n(schema + business rules)"]
+    RAW_T --> VALIDATE["04_validate_data.py\n(schema + business rules)"]
 
-    VALIDATE -->|valid rows| TRANSFORM["transform_data.py\n(PySpark: clean, explode cuisines,\nparse reviews_list, derive metrics)"]
+    VALIDATE -->|valid rows| TRANSFORM["05_transform_data.py\n(PySpark: clean, explode cuisines,\nparse reviews_list, derive metrics)"]
     VALIDATE -->|invalid rows| REJECTED[("rejected_*.csv")]
 
-    TRANSFORM --> LOAD_PG["load_postgres.py"]
+    TRANSFORM --> LOAD_PG["06_load_postgres.py"]
     LOAD_PG --> PG[("PostgreSQL\nstaging")]
 
     PG --> DBT_RUN["dbt run\n(staging -> dims -> facts)"]
     DBT_RUN --> DBT_TEST["dbt test\n(not-null, unique, relationships)"]
-    DBT_TEST --> LOAD_DORIS["load_doris.py"]
+    DBT_TEST --> LOAD_DORIS["08_load_doris.py"]
     LOAD_DORIS --> DORIS[("Apache Doris\nanalytics warehouse")]
 
     DORIS --> METABASE["Metabase Dashboard"]
@@ -54,62 +54,63 @@ flowchart TD
 Each step below names the exact file that implements it, so you can trace
 "what does this step actually run" while learning the codebase.
 
-- **Step 1: Data Acquisition** — `download_data.py`
+- **Step 1: Data Acquisition** — `01_download_data.py`
   Downloads the real Zomato Bangalore restaurant dataset from Kaggle
   (`rajeshrampure/zomato-dataset`) via `kagglehub`. One-time seed step, not part
   of the daily run.
-- **Step 2: Synthetic Data Generation** — `generate_synthetic_data.py`
+- **Step 2: Synthetic Data Generation** — `02_generate_synthetic_data.py`
   Generates customers, orders, order items, payments, and deliveries with
   Faker, anchored to real restaurant signals (rating, votes, cost-for-two) so
   volumes/values stay plausible.
-- **Step 3: Data Profiling** — `profile_data.py`
+- **Step 3: Data Profiling** — `03_profile_data.py`
   Run once (manually, not part of the daily DAG) before validation rules are
   written, to inspect nulls per column, encoding issues, malformed
   `rate`/`approx_cost` values, and duplicate keys — so Step 4's rules are based
   on the data's actual mess, not assumptions.
-- **Step 4: Data Validation** — `validate_data.py`
+- **Step 4: Data Validation** — `04_validate_data.py`
   Enforces an explicit schema and business rules (no negative amounts, no
   orphaned restaurant IDs, valid timestamps/ratings). Valid rows pass through;
   invalid rows are quarantined with a reason code instead of dropped or
   crashed on.
-- **Step 5: Data Transformation** — `transform_data.py`
+- **Step 5: Data Transformation** — `05_transform_data.py`
   PySpark job that cleans types, explodes multi-value fields (`cuisines`,
   `rest_type`), parses `reviews_list` into real review rows, and derives
   metrics (order_total, delivery_time, customer_order_count, etc.).
-- **Step 6: Load to Staging** — `load_postgres.py`
+- **Step 6: Load to Staging** — `06_load_postgres.py`
   Loads cleaned/transformed data into PostgreSQL as the operational staging
   layer.
 - **Step 7: Data Modeling** — `dbt_project/` (`dbt run`, `dbt test`)
   Builds the star schema on top of staging (staging models → dimensions →
   facts) and runs dbt tests (not-null, unique, relationships) as a quality gate.
-- **Step 8: Load to Warehouse** — `load_doris.py`
+- **Step 8: Load to Warehouse** — `08_load_doris.py`
   Loads the modeled star schema into Apache Doris, the analytics warehouse
   that actually serves BI queries.
-- **Step 9: Orchestration** — `dag.py`
+- **Step 9: Orchestration** — `09_dag.py`
   A single Airflow DAG that calls Steps 2, 4, 5, 6, 7, and 8 in order, daily.
   (Step 1 and Step 3 are one-time/manual, so they're intentionally not in the DAG.)
 - **Step 10: Visualization** — Metabase (no `.py` file — configured through the
   Metabase UI, connected directly to Apache Doris).
-- **Step 11: Monitoring** — surfaced inside `validate_data.py` (rejection
-  counts/rates) and `dbt test` output (Step 7); Step 4's rejection stats and
-  Step 7's test results both feed the Pipeline Health dashboard page, so no
-  separate script is needed.
+- **Step 11: Monitoring** — `04_validate_data.py` appends its rejection
+  counts/rate to Postgres (`pipeline_validation_runs`) on every run; a small
+  helper, `07_record_dbt_test_results.py`, does the same for `dbt test`
+  results (`pipeline_dbt_test_runs`) since dbt doesn't persist its own pass/fail
+  counts anywhere queryable. Both feed the Pipeline Health dashboard page.
 
 ### Step → file quick reference
 
 | Step | File | Runs in daily DAG? |
 |---|---|---|
-| 1. Data Acquisition | `download_data.py` | No — one-time seed |
-| 2. Synthetic Data Generation | `generate_synthetic_data.py` | Yes |
-| 3. Data Profiling | `profile_data.py` | No — manual, done once up front |
-| 4. Data Validation | `validate_data.py` | Yes |
-| 5. Data Transformation | `transform_data.py` | Yes |
-| 6. Load to Staging | `load_postgres.py` | Yes |
+| 1. Data Acquisition | `01_download_data.py` | No — one-time seed |
+| 2. Synthetic Data Generation | `02_generate_synthetic_data.py` | Yes |
+| 3. Data Profiling | `03_profile_data.py` | No — manual, done once up front |
+| 4. Data Validation | `04_validate_data.py` | Yes |
+| 5. Data Transformation | `05_transform_data.py` | Yes |
+| 6. Load to Staging | `06_load_postgres.py` | Yes |
 | 7. Data Modeling | `dbt_project/` | Yes |
-| 8. Load to Warehouse | `load_doris.py` | Yes |
-| 9. Orchestration | `dag.py` | (this *is* the DAG) |
+| 8. Load to Warehouse | `08_load_doris.py` | Yes |
+| 9. Orchestration | `09_dag.py` | (this *is* the DAG) |
 | 10. Visualization | Metabase (no file) | No — always-on, reads live from Doris |
-| 11. Monitoring | reads output of `validate_data.py` + `dbt test` | Yes (passive, no separate script) |
+| 11. Monitoring | `04_validate_data.py` + `07_record_dbt_test_results.py` | Yes (passive) |
 
 ## Tech stack
 
@@ -210,17 +211,20 @@ required by dbt itself.
 
 ```
 zomato-etl/
-├── download_data.py            # kagglehub: pull real restaurant dataset (one-time)
-├── profile_data.py             # one-time profiling pass (nulls, encoding, malformed values)
-├── generate_synthetic_data.py  # Faker: create orders/customers/payments/deliveries
-├── validate_data.py            # schema + business-rule checks, quarantines bad rows
-├── transform_data.py           # PySpark: clean, enrich, explode cuisines, parse reviews_list
-├── load_postgres.py            # load cleaned data into Postgres staging tables
-├── load_doris.py               # load dbt-built star schema into Apache Doris
-├── dag.py                      # single Airflow DAG wiring the steps above
-├── dbt_project/                # dbt's required internal structure (models/, tests/)
-├── data/                       # flat data folder — raw_*.csv, rejected_*.csv, etc.
-├── docker-compose.yml          # Postgres, Airflow, Doris, Metabase
+├── 01_download_data.py             # kagglehub: pull real restaurant dataset (one-time)
+├── 02_generate_synthetic_data.py   # Faker: create orders/customers/payments/deliveries
+├── 03_profile_data.py              # one-time profiling pass (nulls, encoding, malformed values)
+├── 04_validate_data.py             # schema + business-rule checks, quarantines bad rows
+├── 05_transform_data.py            # PySpark: clean, enrich, explode cuisines, parse reviews_list
+├── 06_load_postgres.py             # load cleaned data into Postgres staging tables
+├── 07_record_dbt_test_results.py   # records dbt test pass/fail for the health dashboard
+├── 08_load_doris.py                # load dbt-built star schema into Apache Doris
+├── 09_dag.py                       # single Airflow DAG wiring the steps above
+├── dbt_project/                    # dbt's required internal structure (models/, tests/)
+├── data/                           # flat data folder — raw_*.csv, rejected_*.csv, etc.
+├── Dockerfile                      # ad-hoc script image (PySpark + JVM)
+├── Dockerfile.airflow              # Airflow image: apache/airflow + JVM + dbt + scripts
+├── docker-compose.yml              # Postgres, Doris, Airflow, Metabase
 ├── requirements.txt
 └── README.md
 ```

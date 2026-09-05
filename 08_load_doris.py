@@ -2,10 +2,10 @@
 into Apache Doris, the analytics warehouse that actually serves BI queries.
 
 For each table: exports it from Postgres with COPY (fast, streams straight
-to a temp file, same approach as load_postgres.py's bulk load) and ingests
+to a temp file, same approach as 06_load_postgres.py's bulk load) and ingests
 it into Doris with Stream Load (Doris's bulk-ingest HTTP API — row-by-row
 INSERT is an anti-pattern for an OLAP engine like Doris). Each table is
-dropped and recreated on every run, mirroring load_postgres.py's full-reload
+dropped and recreated on every run, mirroring 06_load_postgres.py's full-reload
 ELT approach.
 """
 import os

@@ -1,4 +1,4 @@
-"""Step 6: Load to Staging — bulk-load transform_data.py's clean_*.csv output
+"""Step 6: Load to Staging — bulk-load 05_transform_data.py's clean_*.csv output
 into PostgreSQL staging tables.
 
 Uses COPY (via psycopg2 copy_expert) to stream each CSV straight into its
@@ -98,7 +98,7 @@ TABLES = {
 def find_csv(name):
     path = DATA_DIR / f"clean_{name}.csv"
     if not path.exists():
-        raise FileNotFoundError(f"{path} not found — run transform_data.py first")
+        raise FileNotFoundError(f"{path} not found — run 05_transform_data.py first")
     return path
 
 

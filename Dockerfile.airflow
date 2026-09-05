@@ -9,6 +9,6 @@ USER airflow
 COPY requirements.txt /requirements.txt
 RUN pip install --no-cache-dir -r /requirements.txt
 
-COPY --chown=airflow:root dag.py /opt/airflow/dags/dag.py
-COPY --chown=airflow:root generate_synthetic_data.py validate_data.py transform_data.py load_postgres.py load_doris.py record_dbt_test_results.py /opt/project/
+COPY --chown=airflow:root 09_dag.py /opt/airflow/dags/09_dag.py
+COPY --chown=airflow:root 02_generate_synthetic_data.py 04_validate_data.py 05_transform_data.py 06_load_postgres.py 08_load_doris.py 07_record_dbt_test_results.py /opt/project/
 COPY --chown=airflow:root dbt_project /opt/project/dbt_project

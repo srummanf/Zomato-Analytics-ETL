@@ -5,6 +5,7 @@ data/
 !data/.gitkeep
 .env
 kaggle.json
+doc/PASSWORD.md
 dbt_project/target/
 dbt_project/logs/
 dbt_project/dbt_packages/

@@ -1,8 +1,8 @@
 """Step 3: Data Profiling — one-time manual pass over the raw dataset.
 
-Run once, by hand, before writing validate_data.py's rules. Not part of the
+Run once, by hand, before writing 04_validate_data.py's rules. Not part of the
 daily DAG. Uses pandas since this is a one-off exploratory script, not the
-repeatable ingestion path (that's PySpark, in transform_data.py).
+repeatable ingestion path (that's PySpark, in 05_transform_data.py).
 """
 from pathlib import Path
 

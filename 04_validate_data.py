@@ -1,6 +1,6 @@
 """Step 4: Data Validation — explicit business rules on top of the raw files.
 
-Valid rows are written to data/valid_*.csv for transform_data.py to consume.
+Valid rows are written to data/valid_*.csv for 05_transform_data.py to consume.
 Invalid rows are quarantined to data/rejected_*.csv with a reason code instead
 of being dropped silently or crashing the pipeline.
 

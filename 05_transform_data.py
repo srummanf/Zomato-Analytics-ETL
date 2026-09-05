@@ -1,5 +1,5 @@
 """Step 5: Data Transformation — PySpark job on top of the validated
-(valid_*.csv) files from validate_data.py.
+(valid_*.csv) files from 04_validate_data.py.
 
 Cleans/casts types, explodes `cuisines` into a restaurant<->cuisine bridge
 table, takes the primary `rest_type` as restaurant_type, parses `reviews_list`
