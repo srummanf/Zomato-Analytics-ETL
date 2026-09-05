@@ -287,6 +287,30 @@ than replacing old ones.
 
 ---
 
+## 13. `10_dash_dashboard.py` — the local Plotly Dash frontend (optional)
+
+Metabase is the "real" BI tool here, but there's also a lightweight local
+frontend built with [Dash](https://dash.plotly.com/) that reads the exact
+same Postgres/Doris tables and renders the same KPIs in a custom
+Zomato-branded UI — dark red sidebar, the real Zomato logo, Poppins font,
+hero KPI cards. Good for a quick local look without opening Metabase.
+
+```bash
+pip install dash plotly
+python 10_dash_dashboard.py
+```
+
+Then open **http://127.0.0.1:8050**. It's local-only, no deployment — just a
+dev server on your machine, same as any other script in this repo.
+
+**What you should see:** a sidebar with four vertical tabs — Business
+Overview, Customer Insights, Delivery & Operations, Pipeline Health — each
+showing the same KPI cards and charts as the matching Metabase dashboard
+(see `doc/DASHBOARD.md`), just in a different frontend. Data is fetched once
+at startup, so re-run the script after loading new data to refresh it.
+
+---
+
 ## Cheat sheet — every command in one place
 
 ```bash
@@ -311,4 +335,8 @@ docker compose exec airflow bash -c "cd /opt/project && python 08_load_doris.py"
 # Or let Airflow do all of the above for you, daily
 docker compose exec airflow airflow dags unpause zomato_analytics_pipeline
 docker compose exec airflow airflow dags trigger zomato_analytics_pipeline
+
+# Optional: local Plotly Dash frontend, alternative to Metabase
+pip install dash plotly
+python 10_dash_dashboard.py   # open http://127.0.0.1:8050
 ```

@@ -10,8 +10,8 @@ end-to-end analytics pipeline for a Zomato-style food-delivery business. Real
 restaurant data (Kaggle) is combined with synthetic transactional data, cleaned
 and modeled through a full ELT stack, and served through a BI dashboard.
 
-Full architecture, pipeline diagram, and dashboard wireframe: see `PROJECT_OVERVIEW.md`.
-Detailed requirements, data dictionary, and acceptance criteria: see `PRD.md`.
+Full architecture, pipeline diagram, and dashboard wireframe: see `doc/PROJECT_OVERVIEW.md`.
+Detailed requirements, data dictionary, and acceptance criteria: see `doc/PRD.md`.
 
 ## Hard constraints
 
@@ -66,5 +66,7 @@ Detailed requirements, data dictionary, and acceptance criteria: see `PRD.md`.
 
 ## Current status
 
-Architecture, tech stack, data mapping, and requirements are finalized (see
-`PROJECT_OVERVIEW.md` and `PRD.md`). Implementation has not started yet.
+Fully implemented and verified end-to-end (all 10 pipeline steps, 4 Metabase
+dashboards, a local Plotly Dash frontend). See `README.md` for the current
+project status table and `doc/PROJECT_OVERVIEW.md` / `doc/PRD.md` for the
+original architecture and requirements this was built against.

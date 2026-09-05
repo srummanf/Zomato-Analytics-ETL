@@ -1,6 +1,6 @@
 """Step 9: Orchestration — single Airflow DAG wiring Steps 2, 4, 5, 6, 7, 8
 into one daily run. Steps 1 (01_download_data.py) and 3 (03_profile_data.py)
-are one-time/manual, so they're intentionally left out (per PROJECT_OVERVIEW.md).
+are one-time/manual, so they're intentionally left out (per doc/PROJECT_OVERVIEW.md).
 
 Runs inside the airflow container (see Dockerfile.airflow), which bundles a
 JVM for 05_transform_data.py's PySpark job and dbt for the modeling step

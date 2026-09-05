@@ -43,11 +43,15 @@ flowchart TD
     LOADDORIS --> DORIS[("Apache Doris")]
 
     DORIS --> METABASE["10: Metabase dashboards"]
+    DORIS --> DASH["10b: Plotly Dash frontend\n(local, optional)"]
+    PG --> DASH
 
     VAL -.-> HEALTH1[("pipeline_validation_runs")]
     DBTTEST -.-> HEALTH2[("pipeline_dbt_test_runs")]
     HEALTH1 --> METABASE
     HEALTH2 --> METABASE
+    HEALTH1 -.-> DASH
+    HEALTH2 -.-> DASH
 
     style REJ fill:#4a1f1f
     style HEALTH1 fill:#1f3a4a
@@ -406,6 +410,46 @@ flowchart LR
 **Always-on**, not a pipeline step that "runs" — Metabase just reads
 whatever is currently in Doris and Postgres, live, whenever someone opens a
 dashboard. See `doc/DASHBOARD.md` for a full breakdown of every chart.
+
+## Step 10b — Alternative Visualization (`10_dash_dashboard.py`, Plotly Dash)
+
+**Optional, local-only, manually started.** A second frontend on top of the
+exact same Doris/Postgres tables Metabase reads — built with
+[Dash](https://dash.plotly.com/), Plotly's Python framework for building
+web apps without writing any JavaScript.
+
+```python
+app = Dash(__name__, external_stylesheets=[
+    "https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap"
+])
+
+app.layout = html.Div([SIDEBAR, html.Div([TOPBAR, html.Div(id="tab-content")])])
+
+@app.callback(Output("tab-content", "children"), Input("tabs", "value"))
+def render_tab(tab_value):
+    return render_section(SECTIONS[tab_value])
+```
+
+A few things worth noticing if you're new to Dash:
+
+- **`dcc.Tabs(vertical=True)`** is what turns Dash's normal horizontal tab
+  bar into the vertical sidebar nav seen in the screenshots — same
+  component, one prop flipped.
+- **`@app.callback`** is Dash's core idea: wiring an `Input` (here, which
+  sidebar tab is selected) to an `Output` (the page content) via a plain
+  Python function. No page reload — Dash swaps the HTML for you under the
+  hood using React internally, even though you never write any JS.
+- Data (`SECTIONS = fetch_all_sections()`) is fetched **once, at startup**,
+  not per click — this dashboard is a quick local snapshot, not a
+  live-refreshing one. Re-run the script to pick up new data.
+- Styling (brand colors, the `assets/zomato_logo.svg` logo, the Poppins
+  font) is plain Python dicts passed as inline `style=` props, plus Dash's
+  `assets/` folder convention (anything dropped in `assets/` is
+  auto-served at `/assets/...`, which is how the logo file is referenced).
+
+Run it with `pip install dash plotly && python 10_dash_dashboard.py`, then
+open `http://127.0.0.1:8050`. See `doc/DASHBOARD.md` for what the branding
+looks like and `doc/WALKTHROUGH.md` step 13 for the exact commands.
 
 ## Step 11 — Monitoring (`04_validate_data.py` + `07_record_dbt_test_results.py`)
 

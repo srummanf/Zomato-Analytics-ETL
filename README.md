@@ -3,11 +3,8 @@
 An end-to-end, fully self-hosted analytics pipeline for a Zomato-style food-delivery
 business. Real Bangalore restaurant data (Kaggle) is combined with synthetic
 transactional data (Faker), cleaned and modeled through a complete ELT stack, and
-served through a BI dashboard — all on free, self-hosted tooling with **no paid
+served through a Plotly dashboard — all on free, self-hosted tooling with **no paid
 cloud services**.
-
-Academic project. Built to learn PySpark, dbt, and a modern free-tier warehouse
-stack end-to-end, not just to produce a working demo.
 
 ---
 
@@ -69,22 +66,23 @@ not part of the daily DAG.
 
 ## Tech Stack
 
-| Layer               | Technology                            | Notes |
-|---------------------|----------------------------------------|-------|
-| Language            | Python 3.11                            | 3.12 breaks PySpark 3.5.3 workers on Windows |
-| Real data source    | Kaggle `rajeshrampure/zomato-dataset`  | via `kagglehub`, one-time seed |
-| Synthetic data      | Faker                                  | orders, customers, order items, payments, deliveries |
-| Transform           | PySpark 3.5.3                          | runs inside the `airflow` container (bundled JVM) |
-| Staging store       | PostgreSQL 16                          | port `5439` on host |
-| Warehouse modeling  | dbt Core 1.8.8 (`dbt-postgres`)        | builds star schema directly in Postgres |
-| Analytics warehouse | Apache Doris (`all-in-one` image)      | FE+BE in one container; serves BI queries |
-| Orchestration       | Apache Airflow 3.3.1 (`standalone`)    | LocalExecutor, SQLite metadata (not persisted) |
-| Dashboard           | Metabase                               | port `3030` on host |
-| Containers          | Docker / Docker Compose                | 4 services: postgres, doris, airflow, metabase |
-| Version control     | Git + GitHub                           | |
+
+| Layer               | Technology                           | Notes                                                |
+| --------------------- | -------------------------------------- | ------------------------------------------------------ |
+| Language            | Python 3.11                          | 3.12 breaks PySpark 3.5.3 workers on Windows         |
+| Real data source    | Kaggle`rajeshrampure/zomato-dataset` | via`kagglehub`, one-time seed                        |
+| Synthetic data      | Faker                                | orders, customers, order items, payments, deliveries |
+| Transform           | PySpark 3.5.3                        | runs inside the`airflow` container (bundled JVM)     |
+| Staging store       | PostgreSQL 16                        | port`5439` on host                                   |
+| Warehouse modeling  | dbt Core 1.8.8 (`dbt-postgres`)      | builds star schema directly in Postgres              |
+| Analytics warehouse | Apache Doris (`all-in-one` image)    | FE+BE in one container; serves BI queries            |
+| Orchestration       | Apache Airflow 3.3.1 (`standalone`)  | LocalExecutor, SQLite metadata (not persisted)       |
+| Dashboard           | Metabase                             | port`3030` on host                                   |
+| Containers          | Docker / Docker Compose              | 4 services: postgres, doris, airflow, metabase       |
+| Version control     | Git + GitHub                         |                                                      |
 
 Full rationale for each choice (why Doris over Snowflake, why dbt over Great
-Expectations, etc.) is in [`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md).
+Expectations, etc.) is in [`doc/PROJECT_OVERVIEW.md`](doc/PROJECT_OVERVIEW.md).
 
 ---
 
@@ -93,22 +91,24 @@ Expectations, etc.) is in [`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md).
 **All 10 pipeline steps are implemented, wired into Airflow, and verified with a
 real end-to-end run.**
 
-| Step | File | Runs in daily DAG? | Status |
-|---|---|:---:|---|
-| 1. Data Acquisition | `01_download_data.py` | No (one-time seed) | ✅ |
-| 2. Synthetic Data Generation | `02_generate_synthetic_data.py` | Yes | ✅ |
-| 3. Data Profiling | `03_profile_data.py` | No (manual, one-time) | ✅ |
-| 4. Data Validation | `04_validate_data.py` | Yes | ✅ |
-| 5. Data Transformation | `05_transform_data.py` (PySpark) | Yes | ✅ |
-| 6. Load to Staging | `06_load_postgres.py` | Yes | ✅ |
-| 7. Data Modeling | `dbt_project/` | Yes | ✅ 37/37 tests passing |
-| 8. Load to Warehouse | `08_load_doris.py` | Yes | ✅ |
-| 9. Orchestration | `09_dag.py` (Airflow) | — | ✅ |
-| 10. Visualization | Metabase (4 dashboards) | No (always-on) | ✅ |
-| 11. Monitoring | Postgres `pipeline_validation_runs` / `pipeline_dbt_test_runs` | Yes (passive) | ✅ |
+
+| Step                         | File                                                          |  Runs in daily DAG?  | Status                 |
+| ------------------------------ | --------------------------------------------------------------- | :---------------------: | ------------------------ |
+| 1. Data Acquisition          | `01_download_data.py`                                         |  No (one-time seed)  | ✅                     |
+| 2. Synthetic Data Generation | `02_generate_synthetic_data.py`                               |          Yes          | ✅                     |
+| 3. Data Profiling            | `03_profile_data.py`                                          | No (manual, one-time) | ✅                     |
+| 4. Data Validation           | `04_validate_data.py`                                         |          Yes          | ✅                     |
+| 5. Data Transformation       | `05_transform_data.py` (PySpark)                              |          Yes          | ✅                     |
+| 6. Load to Staging           | `06_load_postgres.py`                                         |          Yes          | ✅                     |
+| 7. Data Modeling             | `dbt_project/`                                                |          Yes          | ✅ 37/37 tests passing |
+| 8. Load to Warehouse         | `08_load_doris.py`                                            |          Yes          | ✅                     |
+| 9. Orchestration             | `09_dag.py` (Airflow)                                         |          —          | ✅                     |
+| 10. Visualization            | Metabase (4 dashboards)                                       |    No (always-on)    | ✅                     |
+| 11. Monitoring               | Postgres`pipeline_validation_runs` / `pipeline_dbt_test_runs` |     Yes (passive)     | ✅                     |
 
 Last verified full-DAG run: `generate_synthetic_data → validate_data →
 transform_data → load_postgres → dbt_run → dbt_test → record_dbt_test_results
+
 + load_doris`, all green, ~4 minutes end to end.
 
 ---
@@ -130,6 +130,8 @@ data etl/
 ├── 07_record_dbt_test_results.py   # records dbt test pass/fail to Postgres for Step 11
 ├── 08_load_doris.py                # Step 8 — Stream Load star schema into Doris
 ├── 09_dag.py                       # Step 9 — single Airflow DAG wiring steps 2,4-8
+├── 10_dash_dashboard.py            # standalone local Plotly Dash frontend (not in the DAG)
+├── assets/                         # Dash static assets (the Zomato logo SVG)
 ├── dbt_project/                    # Step 7 — dbt models (dims/facts) + tests
 │   ├── dbt_project.yml
 │   ├── profiles.yml
@@ -145,11 +147,18 @@ data etl/
 ├── Dockerfile.airflow              # Airflow image: apache/airflow + JVM + dbt + scripts
 ├── docker-compose.yml              # postgres, doris, airflow, metabase services
 ├── requirements.txt
+├── .env.example                    # template for every env var the scripts read
 ├── data/                           # gitignored — raw/valid/rejected/clean CSVs
-├── PROJECT_OVERVIEW.md             # architecture, diagrams, dashboard wireframe
-├── PRD.md                          # requirements, data dictionary, acceptance criteria
+├── doc/                            # all other docs — see below
+│   ├── PROJECT_OVERVIEW.md         # architecture, diagrams, dashboard wireframe
+│   ├── PRD.md                      # requirements, data dictionary, acceptance criteria
+│   ├── FLOWCHART.md
+│   ├── DASHBOARD.md
+│   ├── WALKTHROUGH.md
+│   ├── VIDEO.md
+│   └── PASSWORD.md                 # gitignored — never pushed
 ├── CLAUDE.md                       # hard constraints for AI-assisted work in this repo
-└── README.md                       # this file
+└── README.md                       # this file (kept at root on purpose — GitHub renders it automatically)
 ```
 
 ---
@@ -194,12 +203,13 @@ four to report healthy:
 docker compose ps
 ```
 
-| Service  | Host port(s)              | Purpose |
-|----------|---------------------------|---------|
-| postgres | `5439` → 5432             | Staging store |
-| doris    | `8030` (FE HTTP), `9030` (MySQL protocol), `8040` (BE HTTP / Stream Load) | Analytics warehouse |
-| airflow  | `8080`                    | Airflow UI (`standalone` mode; admin password printed to `docker compose logs airflow` on first boot) |
-| metabase | `3030` → 3000             | BI dashboard UI |
+
+| Service  | Host port(s)                                                              | Purpose                                                                                               |
+| ---------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| postgres | `5439` → 5432                                                            | Staging store                                                                                         |
+| doris    | `8030` (FE HTTP), `9030` (MySQL protocol), `8040` (BE HTTP / Stream Load) | Analytics warehouse                                                                                   |
+| airflow  | `8080`                                                                    | Airflow UI (`standalone` mode; admin password printed to `docker compose logs airflow` on first boot) |
+| metabase | `3030` → 3000                                                            | BI dashboard UI                                                                                       |
 
 ---
 
@@ -249,19 +259,36 @@ docker compose exec airflow bash -c "cd /opt/project && python 08_load_doris.py"
 Open `http://localhost:3030`. Four dashboards live under **Our analytics**:
 Business Overview, Customer Insights, Delivery & Operations, Pipeline Health.
 
+### Alternative: local Plotly Dash frontend
+
+`10_dash_dashboard.py` is a standalone, local-only frontend (not part of the
+DAG) that reads the same Doris/Postgres tables and shows the same four pages
+in a custom Zomato-branded UI (red sidebar, real Zomato logo, Poppins font).
+No Docker/Metabase login needed — just:
+
+```bash
+pip install dash plotly
+python 10_dash_dashboard.py
+```
+
+Then open `http://127.0.0.1:8050`. See [`doc/DASHBOARD.md`](doc/DASHBOARD.md#alternative-frontend--the-local-plotly-dash-dashboard)
+for what it looks like and [`doc/WALKTHROUGH.md`](doc/WALKTHROUGH.md) step 13
+for more detail.
+
 ---
 
 ## Data Model (Star Schema)
 
 **Fact tables**
 
-| Table | Grain |
-|---|---|
-| `fact_orders` | one row per order |
-| `fact_order_items` | one row per order line item |
-| `fact_deliveries` | one row per delivery |
-| `fact_payments` | one row per payment |
-| `fact_reviews` | one row per parsed review (from Kaggle's real `reviews_list`) |
+
+| Table              | Grain                                                        |
+| -------------------- | -------------------------------------------------------------- |
+| `fact_orders`      | one row per order                                            |
+| `fact_order_items` | one row per order line item                                  |
+| `fact_deliveries`  | one row per delivery                                         |
+| `fact_payments`    | one row per payment                                          |
+| `fact_reviews`     | one row per parsed review (from Kaggle's real`reviews_list`) |
 
 **Dimension tables**
 
@@ -275,18 +302,19 @@ scrape-region label within Bangalore only. See `CLAUDE.md` for this and other
 known data-shape gotchas.
 
 Full data dictionary (raw Kaggle column → star-schema column mapping) is in
-[`PRD.md`](PRD.md#53-data-dictionary--raw-kaggle-columns--star-schema).
+[`doc/PRD.md`](doc/PRD.md#53-data-dictionary--raw-kaggle-columns--star-schema).
 
 ---
 
 ## Dashboards
 
-| Page | Highlights |
-|---|---|
-| **Business Overview** | Total orders/revenue/AOV/active restaurants, revenue trend, orders by area, top cuisines, top restaurants |
-| **Customer Insights** | Total/new customers, repeat rate, avg orders/customer, customer value tiers, orders by payment method |
+
+| Page                      | Highlights                                                                                                                                       |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Business Overview**     | Total orders/revenue/AOV/active restaurants, revenue trend, orders by area, top cuisines, top restaurants                                        |
+| **Customer Insights**     | Total/new customers, repeat rate, avg orders/customer, customer value tiers, orders by payment method                                            |
 | **Delivery & Operations** | Avg delivery time, cancellation rate, avg rating, on-time %, order volume by hour, delivery partner leaderboard, online-order-enabled comparison |
-| **Pipeline Health** | Rows ingested/rejected/rejection rate (latest run), dbt test pass rate, rejection rate trend |
+| **Pipeline Health**       | Rows ingested/rejected/rejection rate (latest run), dbt test pass rate, rejection rate trend                                                     |
 
 Business Overview/Customer Insights/Delivery & Operations query **Doris**
 directly. Pipeline Health queries **Postgres** (`pipeline_validation_runs` /
@@ -321,16 +349,17 @@ inter-container networking, and fall back to host-side defaults (matching the
 mapped ports) when run locally outside Docker. Override via a `.env` file
 (gitignored) or real environment variables — never commit real credentials.
 
-| Variable | Default (local/.env) | Default (inside `airflow` container) |
-|---|---|---|
-| `POSTGRES_HOST` | `localhost` | `postgres` |
-| `POSTGRES_PORT` | `5439` | `5432` |
-| `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | `zomato` | `zomato` |
-| `DORIS_HOST` | `localhost` | `doris` |
-| `DORIS_QUERY_PORT` | `9030` | `9030` |
-| `DORIS_STREAM_LOAD_PORT` | `8040` | `8040` |
-| `DORIS_USER` / `DORIS_PASSWORD` | `root` / *(empty)* | `root` / *(empty)* |
-| `DBT_PROFILES_DIR` | `dbt_project` (pass `--profiles-dir`) | `/opt/project/dbt_project` |
+
+| Variable                                              | Default (local/.env)                  | Default (inside`airflow` container) |
+| ------------------------------------------------------- | --------------------------------------- | ------------------------------------- |
+| `POSTGRES_HOST`                                       | `localhost`                           | `postgres`                          |
+| `POSTGRES_PORT`                                       | `5439`                                | `5432`                              |
+| `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | `zomato`                              | `zomato`                            |
+| `DORIS_HOST`                                          | `localhost`                           | `doris`                             |
+| `DORIS_QUERY_PORT`                                    | `9030`                                | `9030`                              |
+| `DORIS_STREAM_LOAD_PORT`                              | `8040`                                | `8040`                              |
+| `DORIS_USER` / `DORIS_PASSWORD`                       | `root` / *(empty)*                    | `root` / *(empty)*                  |
+| `DBT_PROFILES_DIR`                                    | `dbt_project` (pass `--profiles-dir`) | `/opt/project/dbt_project`          |
 
 ---
 
@@ -345,6 +374,7 @@ these fixes only matter for local/native runs on Windows.
 **CSV quoting mismatches between tools** — hit and fixed twice in this
 project, worth knowing about if you touch `05_transform_data.py` or
 `08_load_doris.py` again:
+
 - Postgres's `COPY (FORMAT csv)` and pandas both follow RFC4180: an embedded
   quote is escaped by **doubling** it (`""`).
 - Spark's CSV writer/reader **defaults to backslash-escaping** (`\"`) instead.
@@ -381,15 +411,18 @@ risk during planning (see `CLAUDE.md`).
 
 ## Project Docs
 
-- [`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md) — architecture rationale, full
-  pipeline diagram, dashboard wireframe, folder-structure philosophy
-- [`PRD.md`](PRD.md) — goals/non-goals, full data dictionary, functional and
-  non-functional requirements, acceptance criteria
 - [`CLAUDE.md`](CLAUDE.md) — hard constraints (no paid cloud, flat structure,
-  data-quality-first) for anyone (human or AI) working in this repo
+  data-quality-first) for anyone (human or AI) working in this repo. Kept at
+  the root on purpose — Claude Code auto-loads it as project instructions
+  from there.
 
-Deeper, tutorial-style docs live in [`doc/`](doc/):
+Everything else lives in [`doc/`](doc/):
 
+- [`doc/PROJECT_OVERVIEW.md`](doc/PROJECT_OVERVIEW.md) — architecture
+  rationale, full pipeline diagram, dashboard wireframe, folder-structure
+  philosophy
+- [`doc/PRD.md`](doc/PRD.md) — goals/non-goals, full data dictionary,
+  functional and non-functional requirements, acceptance criteria
 - [`doc/FLOWCHART.md`](doc/FLOWCHART.md) — the entire pipeline, step by step,
   with a diagram and a real code snippet for every stage
 - [`doc/DASHBOARD.md`](doc/DASHBOARD.md) — what every chart on every
@@ -400,3 +433,5 @@ Deeper, tutorial-style docs live in [`doc/`](doc/):
   and tool used (ETL, Airflow/DAGs, PySpark, dbt, Doris, Docker, Metabase)
 - [`doc/PASSWORD.md`](doc/PASSWORD.md) — local credentials for every service
   (gitignored — never pushed to GitHub)
+
+> Built an end-to-end ELT analytics pipeline (Zomato-style food delivery data) using PySpark, PostgreSQL, dbt, Apache Doris, and Airflow, processing 51.7K real restaurants and 1.3M+ parsed reviews; cut warehouse load time from 20+ min to 6.6s by replacing batched INSERTs with native COPY, and fixed a Spark memory bug that cut transform runtime by ~65% (9 min → 2.5 min)

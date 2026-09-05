@@ -236,6 +236,32 @@ something upstream (a source system, an API, a schema change) broke.
 
 ---
 
+## Alternative frontend — the local Plotly Dash dashboard
+
+Metabase needs Docker running and a browser pointed at `localhost:3030`.
+For a quicker local look at the same numbers, `10_dash_dashboard.py` builds
+a second, custom frontend using [Dash](https://dash.plotly.com/) (Plotly's
+Python web-app framework) — same four pages (Business Overview, Customer
+Insights, Delivery & Operations, Pipeline Health), same underlying SQL
+against Doris/Postgres, just a different UI:
+
+- A dark red (`#E23744`, Zomato's actual brand color) sidebar with vertical
+  tabs instead of Metabase's top-level dashboard picker.
+- The real Zomato wordmark logo (`assets/zomato_logo.svg`) at the top.
+- **Poppins** as the font throughout, loaded from Google Fonts.
+- Each page's headline KPI rendered as a "hero card" (bigger, red gradient
+  background) — the rest as smaller white cards, mirroring a typical modern
+  analytics SaaS dashboard rather than Metabase's default grid look.
+
+Run it with `pip install dash plotly && python 10_dash_dashboard.py`, then
+open `http://127.0.0.1:8050`. It's entirely local — no deployment, just a
+dev server — and reads data once at startup, so it's a good "sanity check"
+view to keep open in a second tab while iterating on the pipeline, without
+needing Metabase's login flow every time. See `doc/WALKTHROUGH.md` step 13
+for the full run instructions.
+
+---
+
 ## Where to look next
 
 - **`doc/FLOWCHART.md`** — how data actually gets from Kaggle/Faker into
