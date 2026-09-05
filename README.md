@@ -29,28 +29,38 @@ cloud services**.
 ## Architecture
 
 ```mermaid
-flowchart LR
-    KAGGLE["Kaggle dataset\n(rajeshrampure/zomato-dataset)"] -->|01_download_data.py\none-time| RAW_R["data/raw_restaurants.csv"]
-    FAKER["02_generate_synthetic_data.py\ndaily"] --> RAW_T["raw_customers/orders/\nitems/payments/deliveries.csv"]
+flowchart TD
+    START(["START"])
 
-    RAW_R --> VALIDATE["04_validate_data.py\nStep 4"]
+    START --> KAGGLE["01_download_data.py<br/>One-time"]
+    KAGGLE --> RAW_R["data/raw_restaurants.csv"]
+
+    FAKER["02_generate_synthetic_data.py<br/>Daily"] --> RAW_T["raw_customers/<br/>orders/<br/>items/<br/>payments/<br/>deliveries.csv"]
+
+    RAW_R --> VALIDATE["04_validate_data.py<br/>Step 4"]
     RAW_T --> VALIDATE
-    VALIDATE -->|valid_*.csv| TRANSFORM["05_transform_data.py\nStep 5 (PySpark)"]
-    VALIDATE -.->|rejected_*.csv +\nPostgres pipeline_validation_runs| HEALTH[(Pipeline Health)]
 
-    TRANSFORM -->|clean_*.csv| LOAD_PG["06_load_postgres.py\nStep 6"]
-    LOAD_PG --> PG[("PostgreSQL\nstaging: stg_*")]
+    VALIDATE -->|valid_*.csv| TRANSFORM["05_transform_data.py<br/>Step 5 (PySpark)"]
+    VALIDATE -.->|rejected_*.csv +<br/>Postgres pipeline_validation_runs| HEALTH[("Pipeline Health")]
 
-    PG --> DBT_RUN["dbt run\nstaging -> dims -> facts"]
-    DBT_RUN --> DBT_TEST["dbt test\n37 tests"]
-    DBT_TEST --> LOAD_DORIS["08_load_doris.py\nStep 8"]
-    DBT_TEST -.-> RECORD["07_record_dbt_test_results.py\n-> pipeline_dbt_test_runs"]
-    LOAD_DORIS --> DORIS[("Apache Doris\nstar schema")]
+    TRANSFORM -->|clean_*.csv| LOAD_PG["06_load_postgres.py<br/>Step 6"]
+    LOAD_PG --> PG[("PostgreSQL<br/>staging: stg_*")]
 
-    DORIS --> METABASE["Metabase\n4 dashboards"]
+    PG --> DBT_RUN["dbt run<br/>staging → dims → facts"]
+    DBT_RUN --> DBT_TEST["dbt test<br/>37 tests"]
+
+    DBT_TEST -.-> RECORD["07_record_dbt_test_results.py<br/>→ pipeline_dbt_test_runs"]
+    DBT_TEST --> LOAD_DORIS["08_load_doris.py<br/>Step 8"]
+
+    LOAD_DORIS --> DORIS[("Apache Doris<br/>star schema")]
+
+    DORIS --> METABASE["Metabase<br/>4 dashboards"]
     HEALTH --> METABASE
 
-    AIRFLOW(["Airflow DAG\n@daily"]) -.orchestrates.-> FAKER
+    METABASE --> PLOTLY["Plotly Dashboard"]
+    PLOTLY --> STOP(["STOP"])
+
+    AIRFLOW(["Airflow DAG<br/>@daily"]) -.orchestrates.-> FAKER
     AIRFLOW -.orchestrates.-> VALIDATE
     AIRFLOW -.orchestrates.-> TRANSFORM
     AIRFLOW -.orchestrates.-> LOAD_PG
