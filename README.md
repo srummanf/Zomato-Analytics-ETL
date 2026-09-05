@@ -441,7 +441,5 @@ Everything else lives in [`doc/`](doc/):
   commands to run every file yourself, with expected output
 - [`doc/VIDEO.md`](doc/VIDEO.md) — curated YouTube videos for every concept
   and tool used (ETL, Airflow/DAGs, PySpark, dbt, Doris, Docker, Metabase)
-- [`doc/PASSWORD.md`](doc/PASSWORD.md) — local credentials for every service
-  (gitignored — never pushed to GitHub)
 
 > Built an end-to-end ELT analytics pipeline (Zomato-style food delivery data) using PySpark, PostgreSQL, dbt, Apache Doris, and Airflow, processing 51.7K real restaurants and 1.3M+ parsed reviews; cut warehouse load time from 20+ min to 6.6s by replacing batched INSERTs with native COPY, and fixed a Spark memory bug that cut transform runtime by ~65% (9 min → 2.5 min)
