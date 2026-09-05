@@ -1,26 +1,23 @@
 """Step 6: Load to Staging — bulk-load transform_data.py's clean_*.csv output
 into PostgreSQL staging tables.
 
-Reads each CSV with the stdlib csv module (handles the embedded
-newlines/quotes in review text the same way pandas does) and inserts in
-batches, so the full file is never held in memory at once. Each table is
-dropped and recreated on every run, matching the ELT idea: staging always
-mirrors the latest clean data; dbt (Step 7) does the durable modeling on
-top of it.
+Uses COPY (via psycopg2 copy_expert) to stream each CSV straight into its
+table — orders of magnitude faster than row-by-row INSERT for the
+multi-million-row reviews table, and Postgres's CSV parser already handles
+the embedded newlines/quotes in review text. Each table is dropped and
+recreated on every run, matching the ELT idea: staging always mirrors the
+latest clean data; dbt (Step 7) does the durable modeling on top of it.
 """
 import csv
-import glob
 import os
 from pathlib import Path
 
 import psycopg2
-from psycopg2.extras import execute_values
 from dotenv import load_dotenv
 
 load_dotenv()
 
 DATA_DIR = Path(__file__).parent / "data"
-BATCH_SIZE = 5000
 
 PG_CONFIG = {
     "host": os.getenv("POSTGRES_HOST", "localhost"),
@@ -30,45 +27,40 @@ PG_CONFIG = {
     "password": os.getenv("POSTGRES_PASSWORD", "zomato"),
 }
 
-# table -> (source folder under data/, CREATE TABLE column definitions)
+# table -> (source data/clean_<name>.csv, CREATE TABLE column definitions)
 TABLES = {
-    "stg_restaurants": ("clean_restaurants", """
+    "stg_restaurants": ("restaurants", """
         restaurant_id INTEGER PRIMARY KEY,
         restaurant_name TEXT,
         url TEXT,
         address TEXT,
         area TEXT,
-        votes INTEGER,
-        online_order_enabled BOOLEAN,
-        table_booking_enabled BOOLEAN,
         restaurant_type TEXT,
-        avg_cost_for_two NUMERIC,
         meal_type TEXT,
-        rating NUMERIC
+        rating NUMERIC,
+        vote_count INTEGER,
+        avg_cost_for_two NUMERIC,
+        online_order_enabled BOOLEAN,
+        table_booking_enabled BOOLEAN
     """),
-    "stg_restaurant_cuisines": ("clean_restaurant_cuisines", """
+    "stg_restaurant_cuisines": ("restaurant_cuisines", """
         restaurant_id INTEGER,
         cuisine TEXT
     """),
-    "stg_restaurant_reviews": ("clean_restaurant_reviews", """
+    "stg_reviews": ("reviews", """
         restaurant_id INTEGER,
         review_rating NUMERIC,
-        review_text TEXT,
-        review_id BIGINT
+        review_text TEXT
     """),
-    "stg_customer_metrics": ("clean_customer_metrics", """
-        customer_id TEXT PRIMARY KEY,
-        order_count INTEGER,
-        lifetime_spend NUMERIC
-    """),
-    "stg_customers": ("clean_customers", """
+    "stg_customers": ("customers", """
         customer_id TEXT PRIMARY KEY,
         name TEXT,
         email TEXT,
         phone TEXT,
-        signup_date DATE
+        signup_date DATE,
+        customer_order_count INTEGER
     """),
-    "stg_orders": ("clean_orders", """
+    "stg_orders": ("orders", """
         order_id TEXT PRIMARY KEY,
         customer_id TEXT,
         restaurant_id INTEGER,
@@ -76,22 +68,23 @@ TABLES = {
         order_time TEXT,
         party_size INTEGER,
         order_total NUMERIC,
-        order_status TEXT
+        order_status TEXT,
+        order_hour INTEGER
     """),
-    "stg_order_items": ("clean_order_items", """
+    "stg_order_items": ("order_items", """
         order_item_id TEXT PRIMARY KEY,
         order_id TEXT,
         item_name TEXT,
         item_price NUMERIC
     """),
-    "stg_payments": ("clean_payments", """
+    "stg_payments": ("payments", """
         payment_id TEXT PRIMARY KEY,
         order_id TEXT,
         payment_method TEXT,
         amount NUMERIC,
         payment_status TEXT
     """),
-    "stg_deliveries": ("clean_deliveries", """
+    "stg_deliveries": ("deliveries", """
         delivery_id TEXT PRIMARY KEY,
         order_id TEXT,
         delivery_partner_id TEXT,
@@ -102,38 +95,31 @@ TABLES = {
 }
 
 
-def find_csv_part(folder_name):
-    matches = glob.glob(str(DATA_DIR / folder_name / "part-*.csv"))
-    if not matches:
-        raise FileNotFoundError(f"No part CSV found in data/{folder_name}/")
-    return matches[0]
+def find_csv(name):
+    path = DATA_DIR / f"clean_{name}.csv"
+    if not path.exists():
+        raise FileNotFoundError(f"{path} not found — run transform_data.py first")
+    return path
 
 
-def stream_batches(csv_path):
+def csv_columns(csv_path):
     with open(csv_path, newline="", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        columns = reader.fieldnames
-        batch = []
-        for row in reader:
-            batch.append(tuple(row[c] if row[c] != "" else None for c in columns))
-            if len(batch) >= BATCH_SIZE:
-                yield columns, batch
-                batch = []
-        if batch:
-            yield columns, batch
+        return next(csv.reader(f))
 
 
-def load_table(cur, table_name, folder_name, columns_sql):
-    csv_path = find_csv_part(folder_name)
+def load_table(cur, table_name, source_name, columns_sql):
+    csv_path = find_csv(source_name)
+    columns = csv_columns(csv_path)
     cur.execute(f"DROP TABLE IF EXISTS {table_name}")
     cur.execute(f"CREATE TABLE {table_name} ({columns_sql})")
 
-    total = 0
-    for columns, batch in stream_batches(csv_path):
-        insert_sql = f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES %s"
-        execute_values(cur, insert_sql, batch)
-        total += len(batch)
-    print(f"{table_name}: {total} rows loaded from {folder_name}")
+    copy_sql = (
+        f"COPY {table_name} ({', '.join(columns)}) "
+        "FROM STDIN WITH (FORMAT csv, HEADER true, NULL '')"
+    )
+    with open(csv_path, newline="", encoding="utf-8") as f:
+        cur.copy_expert(copy_sql, f)
+    print(f"{table_name}: {cur.rowcount} rows loaded from clean_{source_name}.csv")
 
 
 def main():
@@ -141,8 +127,8 @@ def main():
     conn.autocommit = False
     try:
         with conn.cursor() as cur:
-            for table_name, (folder_name, columns_sql) in TABLES.items():
-                load_table(cur, table_name, folder_name, columns_sql)
+            for table_name, (source_name, columns_sql) in TABLES.items():
+                load_table(cur, table_name, source_name, columns_sql)
         conn.commit()
     except Exception:
         conn.rollback()

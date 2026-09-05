@@ -1,0 +1,14 @@
+version: 2
+
+sources:
+  - name: staging
+    schema: public
+    tables:
+      - name: stg_restaurants
+      - name: stg_restaurant_cuisines
+      - name: stg_reviews
+      - name: stg_customers
+      - name: stg_orders
+      - name: stg_order_items
+      - name: stg_payments
+      - name: stg_deliveries
