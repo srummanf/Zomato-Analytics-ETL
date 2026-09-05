@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+data/
+!data/.gitkeep
+.env
+kaggle.json
+dbt_project/target/
+dbt_project/logs/
+dbt_project/dbt_packages/
+.doris/
+.airflow/
+.hadoop/
