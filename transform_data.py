@@ -226,7 +226,14 @@ def write_csv_native(df, name):
     """
     path = DATA_DIR / f"clean_{name}.csv"
     tmp_dir = DATA_DIR / f"_tmp_{name}"
-    df.coalesce(1).write.mode("overwrite").option("header", True).csv(str(tmp_dir))
+    (
+        df.coalesce(1).write.mode("overwrite").option("header", True)
+        # Spark's CSV writer backslash-escapes embedded quotes by default;
+        # Postgres's COPY (FORMAT csv) expects them doubled per RFC4180.
+        # Setting escape == quote makes Spark double them instead.
+        .option("escape", '"')
+        .csv(str(tmp_dir))
+    )
     part_file = next(tmp_dir.glob("part-*.csv"))
     part_file.replace(path)
     shutil.rmtree(tmp_dir)
