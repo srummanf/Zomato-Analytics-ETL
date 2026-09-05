@@ -14,6 +14,7 @@ Hadoop-committer machinery entirely.
 """
 import ast
 import re
+import shutil
 from pathlib import Path
 
 from pyspark.sql import SparkSession, functions as F, types as T
@@ -216,6 +217,22 @@ def write_csv(df, name):
     print(f"Wrote {path} ({len(pdf)} rows)")
 
 
+def write_csv_native(df, name):
+    """Like write_csv, but writes via Spark's own CSV writer instead of
+    .toPandas(). fact_reviews is 1M+ rows of review text — collecting that
+    through Py4J into a pandas DataFrame roughly doubles its memory footprint
+    (JVM objects + Python objects at once) and was crashing the Spark JVM
+    under memory pressure. Writing natively keeps the data in the JVM only.
+    """
+    path = DATA_DIR / f"clean_{name}.csv"
+    tmp_dir = DATA_DIR / f"_tmp_{name}"
+    df.coalesce(1).write.mode("overwrite").option("header", True).csv(str(tmp_dir))
+    part_file = next(tmp_dir.glob("part-*.csv"))
+    part_file.replace(path)
+    shutil.rmtree(tmp_dir)
+    print(f"Wrote {path}")
+
+
 def main():
     spark = get_spark()
     try:
@@ -228,7 +245,7 @@ def main():
 
         write_csv(build_clean_restaurants(restaurants), "restaurants")
         write_csv(build_restaurant_cuisines(restaurants), "restaurant_cuisines")
-        write_csv(build_fact_reviews(restaurants), "reviews")
+        write_csv_native(build_fact_reviews(restaurants), "reviews")
         write_csv(build_clean_customers(customers, orders), "customers")
         write_csv(build_clean_orders(orders), "orders")
         write_csv(order_items.withColumn("item_price", F.col("item_price").cast("double")), "order_items")

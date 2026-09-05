@@ -5,15 +5,30 @@ Invalid rows are quarantined to data/rejected_*.csv with a reason code instead
 of being dropped silently or crashing the pipeline.
 
 Exits non-zero if any entity's rejection rate exceeds REJECTION_RATE_THRESHOLD,
-so a bad run fails loudly instead of flowing downstream.
+so a bad run fails loudly instead of flowing downstream. Also appends one row
+per run to Postgres (pipeline_validation_runs) so the Metabase Pipeline
+Health page can chart rejection rates over time without a separate script.
 """
+import os
 import sys
 from pathlib import Path
 
 import pandas as pd
+import psycopg2
+from dotenv import load_dotenv
+
+load_dotenv()
 
 DATA_DIR = Path(__file__).parent / "data"
 REJECTION_RATE_THRESHOLD = 0.02
+
+PG_CONFIG = {
+    "host": os.getenv("POSTGRES_HOST", "localhost"),
+    "port": os.getenv("POSTGRES_PORT", "5439"),
+    "dbname": os.getenv("POSTGRES_DB", "zomato"),
+    "user": os.getenv("POSTGRES_USER", "zomato"),
+    "password": os.getenv("POSTGRES_PASSWORD", "zomato"),
+}
 
 
 def split(df, is_valid_mask, reason_series):
@@ -83,6 +98,28 @@ def report(name, valid, rejected):
     return rate
 
 
+def record_pipeline_health(total_valid, total_rejected, rejection_rate):
+    conn = psycopg2.connect(**PG_CONFIG)
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS pipeline_validation_runs (
+                    run_at TIMESTAMP DEFAULT now(),
+                    total_valid INTEGER,
+                    total_rejected INTEGER,
+                    rejection_rate NUMERIC
+                )
+            """)
+            cur.execute(
+                "INSERT INTO pipeline_validation_runs (total_valid, total_rejected, rejection_rate) "
+                "VALUES (%s, %s, %s)",
+                (total_valid, total_rejected, rejection_rate),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def main():
     restaurants = pd.read_csv(DATA_DIR / "raw_restaurants.csv")
     customers = pd.read_csv(DATA_DIR / "raw_customers.csv")
@@ -112,10 +149,17 @@ def main():
     ]
 
     worst_rate = 0.0
+    total_valid = 0
+    total_rejected = 0
     for name, valid, rejected in results:
         valid.to_csv(DATA_DIR / f"valid_{name}.csv", index=False)
         rejected.to_csv(DATA_DIR / f"rejected_{name}.csv", index=False)
         worst_rate = max(worst_rate, report(name, valid, rejected))
+        total_valid += len(valid)
+        total_rejected += len(rejected)
+
+    overall_rate = total_rejected / (total_valid + total_rejected) if (total_valid + total_rejected) else 0
+    record_pipeline_health(total_valid, total_rejected, overall_rate)
 
     if worst_rate > REJECTION_RATE_THRESHOLD:
         print(f"\nFAILED: rejection rate {worst_rate:.2%} exceeds threshold {REJECTION_RATE_THRESHOLD:.0%}")

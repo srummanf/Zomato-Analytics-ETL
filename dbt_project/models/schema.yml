@@ -68,6 +68,21 @@ models:
           - relationships:
               to: ref('dim_restaurant')
               field: restaurant_id
+      - name: location_id
+        data_tests:
+          - relationships:
+              to: ref('dim_location')
+              field: location_id
+      - name: date_id
+        data_tests:
+          - relationships:
+              to: ref('dim_date')
+              field: date_id
+      - name: hour_id
+        data_tests:
+          - relationships:
+              to: ref('dim_time')
+              field: hour_id
 
   - name: fact_order_items
     columns:
@@ -88,6 +103,11 @@ models:
           - relationships:
               to: ref('fact_orders')
               field: order_id
+      - name: delivery_partner_id
+        data_tests:
+          - relationships:
+              to: ref('dim_delivery_partner')
+              field: delivery_partner_id
 
   - name: fact_payments
     columns:
