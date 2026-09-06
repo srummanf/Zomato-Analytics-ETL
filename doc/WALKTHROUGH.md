@@ -33,6 +33,7 @@ python 01_download_data.py
 ```
 
 **What you should see:**
+
 ```
 Downloaded to kagglehub cache: C:\Users\...\.cache\kagglehub\...
 Copied to data\raw_restaurants.csv
@@ -67,6 +68,7 @@ python 02_generate_synthetic_data.py --date 2026-01-01
 ```
 
 **What you should see:**
+
 ```
 Generated 500 orders for 2026-01-01 (1252 items, 500 payments, 474 deliveries)
 ```
@@ -92,6 +94,7 @@ python 04_validate_data.py
 ```
 
 **What you should see:**
+
 ```
 restaurants: 51717 valid, 0 rejected (0.00%)
 customers: 5000 valid, 0 rejected (0.00%)
@@ -111,8 +114,7 @@ ls data/valid_*.csv data/rejected_*.csv
 
 **To see the failure path on purpose:** open `data/raw_orders.csv`, set one
 row's amount column to a negative number, save, and rerun. You'll see that
-row show up in `data/rejected_orders.csv` with `reject_reason =
-non_positive_order_total` — and if you corrupt enough rows to cross 2%, the
+row show up in `data/rejected_orders.csv` with `reject_reason = non_positive_order_total` — and if you corrupt enough rows to cross 2%, the
 script exits with code 1 instead of printing "All entities within
 threshold."
 
@@ -131,10 +133,11 @@ docker compose up -d
 docker compose ps   # wait until all 4 show "healthy" (or "Up" for airflow)
 ```
 
-| Service | URL | Login |
-|---|---|---|
-| Airflow | http://localhost:8080 | see `doc/PASSWORD.md` |
-| Metabase | http://localhost:3030 | see `doc/PASSWORD.md` |
+
+| Service  | URL                   | Login                |
+| ---------- | ----------------------- | ---------------------- |
+| Airflow  | http://localhost:8080 | see`doc/PASSWORD.md` |
+| Metabase | http://localhost:3030 | see`doc/PASSWORD.md` |
 
 First boot builds the `airflow` image (bundles PySpark's JVM + dbt), which
 takes a minute or two.
@@ -152,6 +155,7 @@ docker compose exec airflow bash -c "cd /opt/project && python 05_transform_data
 
 **What you should see** (takes ~2–3 minutes, mostly spent on the reviews
 table):
+
 ```
 Wrote /opt/project/data/clean_restaurants.csv (51717 rows)
 Wrote /opt/project/data/clean_restaurant_cuisines.csv (126819 rows)
@@ -175,6 +179,7 @@ docker compose exec airflow bash -c "cd /opt/project && python 06_load_postgres.
 ```
 
 **What you should see** (this should be *fast* — a handful of seconds):
+
 ```
 stg_restaurants: 51717 rows loaded from clean_restaurants.csv
 ...
@@ -213,6 +218,7 @@ docker compose exec airflow bash -c "cd /opt/project && python 07_record_dbt_tes
 ```
 
 **What you should see:**
+
 ```
 Recorded dbt test run: 37/37 passed
 ```
@@ -231,6 +237,7 @@ docker compose exec airflow bash -c "cd /opt/project && python 08_load_doris.py"
 ```
 
 **What you should see:**
+
 ```
 dim_location: 93 rows loaded from dim_location
 dim_cuisine: 107 rows loaded from dim_cuisine
@@ -266,8 +273,7 @@ docker compose exec airflow airflow tasks states-for-dag-run \
 ```
 
 (Airflow auto-creates a `scheduled__...` run once unpaused — you may not
-even need `dags trigger`; check `airflow dags list-runs
-zomato_analytics_pipeline` first.)
+even need `dags trigger`; check `airflow dags list-runs zomato_analytics_pipeline` first.)
 
 You should see all 7 tasks turn `success` in order, roughly 4–6 minutes
 total.

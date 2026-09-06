@@ -1,8 +1,10 @@
 """Step 10 (alternative frontend) — a local Plotly Dash dashboard.
 
 Reads the exact same KPIs and charts the 4 Metabase dashboards show (see
-doc/DASHBOARD.md) straight from Doris and Postgres, and renders them as a
-red, Zomato-branded local web app.
+doc/DASHBOARD.md) straight from Doris and Postgres, and renders them with a
+Zomato-red "Zomato ETL Analytics" design system based on doc/COMPONENTS.md
+(three-column app shell, Be Vietnam Pro, Eva icons). The per-component CSS
+lives in assets/style.css; icons in assets/icons/.
 
 This is a standalone tool, not part of the daily Airflow DAG — it's meant to
 be run by hand, locally, whenever you want to look at the current numbers.
@@ -20,7 +22,7 @@ import pandas as pd
 import psycopg2
 import pymysql
 import plotly.express as px
-from dash import Dash, Input, Output, dash_table, dcc, html
+from dash import Dash, Input, Output, ctx, dcc, html
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -47,27 +49,34 @@ DORIS_CONFIG = {
 }
 
 # ---------------------------------------------------------------------------
-# Zomato-red theme
+# Theme — tokens mirror assets/style.css / doc/COMPONENTS.md
 # ---------------------------------------------------------------------------
 
-RED = "#E23744"
-RED_DARK = "#B71C2B"
-PINK = "#E85D75"
-PAGE_BG = "#F5F1EE"
-CARD_BG = "#FFFFFF"
-SIDEBAR_BG = "#E23744"
-TEXT_DARK = "#2B2B2B"
-TEXT_MUTED = "#8A8A8A"
-RED_PALETTE = [RED, RED_DARK, PINK, "#FF8C69", "#B22222", "#D2691E", "#F08080"]
-FONT_FAMILY = "'Poppins', 'Helvetica Neue', Arial, sans-serif"
+GRAY_600 = "#3a2a2d"
+ZOMATO = "#e23744"
+RED_BRIGHT = "#ff5964"
+AMBER = "#ff9f45"
+FONT_FAMILY = '"Be Vietnam Pro", "Helvetica Neue", Arial, sans-serif'
+CHART_COLORS = ["#e23744", "#ff8a5c", "#ffc24b", "#c8506b", "#8e2b3f", "#ff5964", "#f5a3ac"]
 
-CHART_LAYOUT = dict(
-    plot_bgcolor=CARD_BG,
-    paper_bgcolor=CARD_BG,
-    font=dict(color=TEXT_DARK, family=FONT_FAMILY),
-    title_font=dict(color=RED_DARK, size=16, family=FONT_FAMILY),
-    margin=dict(l=40, r=20, t=50, b=40),
-)
+MAIN_CHART_H = 340
+SIDE_CHART_H = 230
+
+
+def style_fig(fig, height=MAIN_CHART_H):
+    fig.update_layout(
+        template="plotly_dark",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="#f1f1f1", family=FONT_FAMILY, size=12),
+        margin=dict(l=12, r=12, t=10, b=10),
+        height=height,
+        showlegend=False,
+        colorway=CHART_COLORS,
+    )
+    fig.update_xaxes(gridcolor=GRAY_600, zerolinecolor=GRAY_600, title=None)
+    fig.update_yaxes(gridcolor=GRAY_600, zerolinecolor=GRAY_600, title=None)
+    return fig
 
 
 # ---------------------------------------------------------------------------
@@ -134,21 +143,25 @@ def fetch_business_overview():
 
     return {
         "title": "Business Overview",
+        "subtitle": "Orders, revenue and where demand is coming from",
         "kpis": [
-            ("Total Orders", f"{orders:,.0f}"),
-            ("Total Revenue", f"₹{revenue:,.0f}"),
-            ("Avg Order Value", f"₹{aov:,.2f}"),
-            ("Active Restaurants", f"{active_restaurants:,.0f}"),
+            ("shopping-bag", "Total Orders", "Delivered", f"{orders:,.0f}"),
+            ("credit-card", "Total Revenue", "Delivered orders", f"₹{revenue:,.0f}"),
+            ("trending-up", "Avg Order Value", "Per delivered order", f"₹{aov:,.2f}"),
+            ("home", "Active Restaurants", "With >= 1 order", f"{active_restaurants:,.0f}"),
         ],
         "charts": [
-            ("Revenue Trend", px.line(revenue_trend, x="order_date", y="revenue", markers=True,
-                                       color_discrete_sequence=[RED])),
-            ("Orders by Area", px.bar(orders_by_area, x="area", y="orders",
-                                       color="area", color_discrete_sequence=RED_PALETTE)),
-            ("Top Cuisines by Order Volume", px.bar(top_cuisines, x="cuisine", y="orders",
-                                                      color="cuisine", color_discrete_sequence=RED_PALETTE)),
+            ("Revenue trend", "Delivered ₹", px.line(
+                revenue_trend, x="order_date", y="revenue", markers=True,
+                color_discrete_sequence=[ZOMATO])),
+            ("Orders by area", "Top 10", px.bar(
+                orders_by_area, x="area", y="orders", color="area",
+                color_discrete_sequence=CHART_COLORS)),
+            ("Top cuisines", "By order volume", px.bar(
+                top_cuisines, x="cuisine", y="orders", color="cuisine",
+                color_discrete_sequence=CHART_COLORS)),
         ],
-        "tables": [("Top Restaurants", top_restaurants)],
+        "tables": [("Latest restaurant performance", "Top restaurants by revenue", top_restaurants)],
     }
 
 
@@ -191,20 +204,31 @@ def fetch_customer_insights():
         SELECT payment_method, COUNT(*) AS orders
         FROM fact_payments GROUP BY payment_method ORDER BY orders DESC
     """)
+    new_by_day = query_doris("""
+        SELECT signup_date, COUNT(*) AS new_customers
+        FROM dim_customer
+        WHERE signup_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+        GROUP BY signup_date ORDER BY signup_date
+    """)
 
     return {
         "title": "Customer Insights",
+        "subtitle": "Who is ordering and how often they come back",
         "kpis": [
-            ("Total Customers", f"{total_customers:,.0f}"),
-            ("New Customers (30d)", f"{new_customers:,.0f}"),
-            ("Repeat Rate", f"{repeat_rate:.1f}%"),
-            ("Avg Orders / Customer", f"{avg_orders:.2f}"),
+            ("people", "Total Customers", "All time", f"{total_customers:,.0f}"),
+            ("person-add", "New Customers", "Last 30 days", f"{new_customers:,.0f}"),
+            ("refresh", "Repeat Rate", "More than 1 order", f"{repeat_rate:.1f}%"),
+            ("pie-chart", "Avg Orders / Customer", "Among buyers", f"{avg_orders:.2f}"),
         ],
         "charts": [
-            ("Orders by Payment Method", px.bar(by_payment, x="payment_method", y="orders",
-                                                  color="payment_method", color_discrete_sequence=RED_PALETTE)),
+            ("Orders by payment method", "Count", px.bar(
+                by_payment, x="payment_method", y="orders", color="payment_method",
+                color_discrete_sequence=CHART_COLORS)),
+            ("New customers", "Last 30 days", px.line(
+                new_by_day, x="signup_date", y="new_customers", markers=True,
+                color_discrete_sequence=[ZOMATO])),
         ],
-        "tables": [("Customer Value Tiers", value_tiers)],
+        "tables": [("Customer value tiers", "By lifetime spend", value_tiers)],
     }
 
 
@@ -225,6 +249,18 @@ def fetch_delivery_operations():
     by_hour = query_doris("""
         SELECT hour_id, COUNT(*) AS orders FROM fact_orders GROUP BY hour_id ORDER BY hour_id
     """)
+    delivery_buckets = query_doris("""
+        SELECT
+            CASE
+                WHEN delivery_time_minutes < 20 THEN '< 20 min'
+                WHEN delivery_time_minutes < 30 THEN '20–30 min'
+                WHEN delivery_time_minutes < 45 THEN '30–45 min'
+                ELSE '45+ min'
+            END AS bucket,
+            COUNT(*) AS deliveries
+        FROM fact_deliveries
+        GROUP BY bucket ORDER BY bucket
+    """)
     leaderboard = query_doris("""
         SELECT dp.delivery_partner_name AS partner, COUNT(*) AS deliveries,
                ROUND(AVG(d.delivery_time_minutes), 1) AS avg_minutes
@@ -243,19 +279,23 @@ def fetch_delivery_operations():
 
     return {
         "title": "Delivery & Operations",
+        "subtitle": "Delivery speed, reliability and partner performance",
         "kpis": [
-            ("Avg Delivery Time", f"{avg_delivery:.1f} min"),
-            ("Cancellation Rate", f"{cancellation_rate:.2f}%"),
-            ("Avg Rating", f"{avg_rating:.2f} ★"),
-            ("On-Time %", f"{on_time_pct:.1f}%"),
+            ("clock", "Avg Delivery Time", "End to end", f"{avg_delivery:.1f} min"),
+            ("close-circle", "Cancellation Rate", "All orders", f"{cancellation_rate:.2f}%"),
+            ("star", "Avg Rating", "Restaurants", f"{avg_rating:.2f}"),
+            ("checkmark-circle", "On-Time %", "Deliveries", f"{on_time_pct:.1f}%"),
         ],
         "charts": [
-            ("Order Volume by Hour of Day", px.bar(by_hour, x="hour_id", y="orders",
-                                                     color_discrete_sequence=[RED])),
+            ("Order volume by hour", "Hour of day", px.bar(
+                by_hour, x="hour_id", y="orders", color_discrete_sequence=[ZOMATO])),
+            ("Delivery time distribution", "All deliveries", px.bar(
+                delivery_buckets, x="bucket", y="deliveries", color="bucket",
+                color_discrete_sequence=CHART_COLORS)),
         ],
         "tables": [
-            ("Delivery Partner Leaderboard", leaderboard),
-            ("Online Order Enabled vs Not", online_vs_not),
+            ("Delivery partner leaderboard", "Top partners by volume", leaderboard),
+            ("Online order enabled vs not", "Delivered orders", online_vs_not, "table"),
         ],
     }
 
@@ -269,187 +309,415 @@ def fetch_pipeline_health():
         "SELECT * FROM pipeline_validation_runs ORDER BY run_at DESC LIMIT 1")
     latest_dbt = query_pg(
         "SELECT * FROM pipeline_dbt_test_runs ORDER BY run_at DESC LIMIT 1")
-    trend = query_pg(
-        "SELECT run_at, rejection_rate FROM pipeline_validation_runs ORDER BY run_at")
+    trend = query_pg("""
+        SELECT run_at, total_valid, total_rejected, rejection_rate
+        FROM pipeline_validation_runs ORDER BY run_at
+    """)
+    dbt_trend = query_pg("""
+        SELECT run_at, total_tests, passed_tests
+        FROM pipeline_dbt_test_runs ORDER BY run_at
+    """)
 
-    total_valid = scalar(latest_validation, "total_valid")
-    total_rejected = scalar(latest_validation, "total_rejected")
-    rejection_rate = scalar(latest_validation, "rejection_rate")
-    total_tests = scalar(latest_dbt, "total_tests")
-    passed_tests = scalar(latest_dbt, "passed_tests")
+    total_valid = int(scalar(latest_validation, "total_valid") or 0)
+    total_rejected = int(scalar(latest_validation, "total_rejected") or 0)
+    rejection_rate = float(scalar(latest_validation, "rejection_rate") or 0)
+    total_tests = int(scalar(latest_dbt, "total_tests") or 0)
+    passed_tests = int(scalar(latest_dbt, "passed_tests") or 0)
+    run_at = scalar(latest_validation, "run_at", default=None)
+    pass_rate = (100.0 * passed_tests / total_tests) if total_tests else 0.0
+
+    ingested = trend.assign(ingested=trend["total_valid"] + trend["total_rejected"])
+
+    recent = trend.sort_values("run_at", ascending=False).head(8).copy()
+    recent["run"] = pd.to_datetime(recent["run_at"]).dt.strftime("%b %d, %H:%M")
+    recent["rejection %"] = (recent["rejection_rate"].astype(float) * 100).round(2).astype(str) + "%"
+    recent = recent.rename(columns={"total_valid": "valid", "total_rejected": "rejected"})
+    recent = recent[["run", "valid", "rejected", "rejection %"]]
 
     return {
         "title": "Pipeline Health",
+        "subtitle": "Validation rejection rates and dbt test results over time",
         "kpis": [
-            ("Rows Ingested (latest run)", f"{(total_valid or 0) + (total_rejected or 0):,.0f}"),
-            ("Rejected Rows (latest run)", f"{total_rejected or 0:,.0f}"),
-            ("Rejection Rate (latest run)", f"{float(rejection_rate or 0) * 100:.2f}%"),
-            ("dbt Tests (latest run)", f"{passed_tests or 0}/{total_tests or 0}"),
+            ("download", "Rows Ingested", "Latest run", f"{total_valid + total_rejected:,}"),
+            ("slash", "Rejected Rows", "Latest run", f"{total_rejected:,}"),
+            ("pie-chart", "Rejection Rate", "Latest run", f"{rejection_rate * 100:.2f}%"),
+            ("checkmark-circle", "dbt Pass Rate", "Latest run", f"{pass_rate:.0f}%"),
         ],
         "charts": [
-            ("Rejection Rate Trend", px.line(trend, x="run_at", y="rejection_rate", markers=True,
-                                              color_discrete_sequence=[RED])),
+            ("Rejection rate trend", "Per run", px.line(
+                trend, x="run_at", y="rejection_rate", markers=True,
+                color_discrete_sequence=[ZOMATO])),
+            ("Rows ingested per run", "Valid + rejected", px.bar(
+                ingested, x="run_at", y="ingested", color_discrete_sequence=[ZOMATO])),
+            ("dbt tests passed per run", "Out of total", px.line(
+                dbt_trend, x="run_at", y="passed_tests", markers=True,
+                color_discrete_sequence=[AMBER])),
         ],
-        "tables": [],
+        "tables": [("Recent validation runs", "Last 8 runs", recent, "table")],
+        "raw": {
+            "ingested": total_valid + total_rejected,
+            "valid": total_valid,
+            "rejected": total_rejected,
+            "rejection_rate": rejection_rate,
+            "passed": passed_tests,
+            "total_tests": total_tests,
+            "pass_rate": pass_rate,
+            "run_at": run_at,
+        },
     }
 
 
-def fetch_all_sections():
+# ---------------------------------------------------------------------------
+# Formatting helpers
+# ---------------------------------------------------------------------------
+
+def fmt_num(v, col=""):
+    if isinstance(v, str):
+        return v
+    if v is None or (isinstance(v, float) and pd.isna(v)):
+        return "—"
+    if isinstance(v, bool):
+        return "Yes" if v else "No"
+    if col.lower().endswith("_enabled") and v in (0, 1):
+        return "Yes" if v == 1 else "No"
+    money = any(k in col.lower() for k in ("revenue", "spend", "order_value"))
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return str(v)
+    if money and abs(f) >= 1000:
+        return f"₹{f:,.0f}"
+    if f.is_integer():
+        return f"{int(f):,}"
+    return f"{f:,.2f}"
+
+
+def label_of(col):
+    return col.replace("_", " ").title()
+
+
+# ---------------------------------------------------------------------------
+# Component renderers
+# ---------------------------------------------------------------------------
+
+def icon(name, extra=""):
+    """An Eva icon (assets/icons/<name>-outline.svg) rendered as a masked span."""
+    return html.Span(className=f"ic ic-{name} {extra}".strip())
+
+
+def tile(ic_name, label, sub, value):
+    return html.Article(
+        [
+            html.Div([
+                icon(ic_name, "tile-icon"),
+                html.H3([html.Span(label), html.Span(sub)]),
+            ], className="tile-header"),
+            html.Div(value, className="metric"),
+            html.A([html.Span("View analytics"),
+                    html.Span(icon("arrow-forward"), className="icon-button")],
+                   href="#section-charts"),
+        ],
+        className="tile",
+    )
+
+
+def chart_card(title, subtitle, fig, height=MAIN_CHART_H):
+    return html.Article(
+        [
+            html.Div([html.H3(title), html.Span(subtitle)], className="chart-card-header"),
+            dcc.Graph(figure=style_fig(fig, height), config={"displayModeBar": False},
+                      style={"width": "100%", "height": f"{height}px"}),
+        ],
+        className="chart-card",
+    )
+
+
+def transfer_row(row, cols):
+    name = str(row[cols[0]])
+    mids = list(cols[1:-1])
+    last = cols[-1]
+    details = [html.Div([html.Dt(name), html.Dd(label_of(cols[0]))])]
+    details += [html.Div([html.Dt(fmt_num(row[c], c)), html.Dd(label_of(c))]) for c in mids]
+    return html.Div(
+        [
+            html.Div((name[:1] or "-").upper(), className="transfer-logo restaurant-logo"),
+            html.Dl(details, className="transfer-details"),
+            html.Div(fmt_num(row[last], last), className="transfer-number"),
+        ],
+        className="transfer",
+    )
+
+
+def list_section(title, subtitle, df):
+    cols = list(df.columns)
+    return html.Section(
+        [
+            html.Div([
+                html.H2(title),
+                html.Div(html.P(subtitle), className="filter-options"),
+            ], className="transfer-section-header"),
+            html.Div([transfer_row(r, cols) for _, r in df.iterrows()], className="transfers"),
+        ],
+        className="transfer-section",
+    )
+
+
+def data_table(title, subtitle, df):
+    return html.Section(
+        [
+            html.Div([
+                html.H2(title),
+                html.Div(html.P(subtitle), className="filter-options"),
+            ], className="transfer-section-header"),
+            html.Table(
+                [
+                    html.Thead(html.Tr([html.Th(label_of(c)) for c in df.columns])),
+                    html.Tbody([
+                        html.Tr([html.Td(fmt_num(v, c)) for c, v in zip(df.columns, row)])
+                        for row in df.itertuples(index=False)
+                    ]),
+                ],
+                className="data-table",
+            ),
+        ],
+        className="transfer-section",
+    )
+
+
+def render_table_block(spec):
+    kind = spec[3] if len(spec) > 3 else "rows"
+    title, subtitle, df = spec[0], spec[1], spec[2]
+    return data_table(title, subtitle, df) if kind == "table" else list_section(title, subtitle, df)
+
+
+def render_main(key):
+    section = SECTION_BY_KEY[key]
+    blocks = [
+        html.Section(
+            [
+                html.Div([
+                    html.Div([html.H2(section["title"]), html.P(section["subtitle"])]),
+                    html.Span(f"Data as of {NOW}", className="analytics-period"),
+                ], className="analytics-section-header"),
+                html.Div([tile(i, l, s, v) for i, l, s, v in section["kpis"]], className="tiles"),
+                html.Div(
+                    [chart_card(t, st, fig) for t, st, fig in section["charts"]],
+                    className="charts-grid", id="section-charts",
+                ),
+            ],
+            className="analytics-section",
+        ),
+    ]
+    blocks += [render_table_block(spec) for spec in section["tables"]]
+    return blocks
+
+
+def pipeline_card(kind, tag, headline, h3, value):
+    return html.Div(
+        [
+            html.Div([html.Span(tag), html.Span(headline)], className=f"card {kind}"),
+            html.Div([html.H3(h3), html.Div(html.Span(value))], className="payment-details"),
+        ],
+        className="payment",
+    )
+
+
+def sidebar_cards(view):
+    raw = SECTION_BY_KEY["pipeline"]["raw"]
+    if view == "dbt":
+        failed = raw["total_tests"] - raw["passed"]
+        return [
+            pipeline_card("green", "PASS", f"{raw['passed']}", "dbt tests passed", f"{raw['passed']}"),
+            pipeline_card("olive", "FAIL", f"{failed}", "dbt tests failed", f"{failed}"),
+            pipeline_card("gray", "RATE", f"{raw['pass_rate']:.0f}%", "Pass rate",
+                          f"{raw['pass_rate']:.0f}%"),
+        ]
     return [
-        fetch_business_overview(),
-        fetch_customer_insights(),
-        fetch_delivery_operations(),
-        fetch_pipeline_health(),
+        pipeline_card("green", "EXTRACT", f"{raw['ingested']:,}", "Rows ingested",
+                      f"{raw['ingested']:,}"),
+        pipeline_card("olive", "VALIDATE", f"{raw['rejected']:,}", "Rows rejected",
+                      f"{raw['rejected']:,}"),
+        pipeline_card("gray", "REJECT", f"{raw['rejection_rate'] * 100:.2f}%", "Rejection rate",
+                      f"{raw['rejection_rate'] * 100:.2f}%"),
     ]
 
 
-# ---------------------------------------------------------------------------
-# Dash layout
-# ---------------------------------------------------------------------------
+def render_sidebar():
+    section = SECTION_BY_KEY["pipeline"]
+    raw = section["raw"]
+    healthy = raw["rejection_rate"] < 0.02
+    run_at = raw["run_at"]
+    run_at_str = run_at.strftime("%b %d, %H:%M") if hasattr(run_at, "strftime") else "—"
 
-def style_chart(fig, title):
-    fig.update_layout(**CHART_LAYOUT, title=title, showlegend=False)
-    return fig
-
-
-def kpi_card(label, value, hero=False):
-    if hero:
-        return html.Div(
+    return html.Div(
+        html.Section(
             [
-                html.Div(label, style={"fontSize": "15px", "fontWeight": "600", "color": "white"}),
-                html.Div(value, style={"fontSize": "34px", "fontWeight": "800", "color": "white",
-                                        "marginTop": "10px"}),
+                html.H2("Pipeline Health"),
+                html.Div([
+                    html.P("Latest ETL pipeline run"),
+                    html.Div([
+                        html.Button("ETL", id="sidebar-etl", className="card-button active"),
+                        html.Button("DBT", id="sidebar-dbt", className="card-button"),
+                    ]),
+                ], className="payment-section-header"),
+                dcc.Store(id="sidebar-view", data="etl"),
+                html.Div(sidebar_cards("etl"), id="sidebar-cards", className="payments"),
+                html.Div([
+                    html.P("Data quality summary"),
+                    html.Div([html.Label("Valid rows"), html.Strong(f"{raw['valid']:,}")],
+                             className="quality-row"),
+                    html.Div([html.Label("Rejected rows"), html.Strong(f"{raw['rejected']:,}")],
+                             className="quality-row"),
+                    html.Div([html.Label("Rejection rate"),
+                              html.Strong(f"{raw['rejection_rate'] * 100:.2f}%")],
+                             className="quality-row"),
+                    html.Div([html.Label("dbt pass rate"),
+                              html.Strong(f"{raw['pass_rate']:.0f}%")],
+                             className="quality-row"),
+                ], className="faq"),
+                chart_card(*section["charts"][0][:2], section["charts"][0][2], height=SIDE_CHART_H),
+                html.Div([
+                    html.Button("Healthy" if healthy else "Degraded",
+                                className="save-button" if healthy else "save-button warn"),
+                    html.Span(f"Last run: {run_at_str}", className="settings-button"),
+                ], className="payment-section-footer"),
             ],
-            style={
-                "background": f"linear-gradient(135deg, {RED}, {RED_DARK})",
-                "borderRadius": "18px",
-                "padding": "24px 26px",
-                "boxShadow": f"0 8px 20px rgba(226,55,68,0.35)",
-                "flex": "1.4",
-                "minWidth": "220px",
-            },
-        )
-    return html.Div(
-        [
-            html.Div(value, style={"fontSize": "26px", "fontWeight": "700", "color": TEXT_DARK}),
-            html.Div(label, style={"fontSize": "13px", "color": TEXT_MUTED, "marginTop": "6px"}),
-        ],
-        style={
-            "background": CARD_BG,
-            "borderRadius": "18px",
-            "padding": "22px 24px",
-            "boxShadow": "0 4px 14px rgba(0,0,0,0.06)",
-            "flex": "1",
-            "minWidth": "180px",
-        },
-    )
-
-
-def card_wrap(children):
-    return html.Div(
-        children,
-        style={
-            "background": CARD_BG,
-            "borderRadius": "18px",
-            "padding": "20px",
-            "boxShadow": "0 4px 14px rgba(0,0,0,0.06)",
-            "marginBottom": "20px",
-        },
-    )
-
-
-def data_table(title, df):
-    return card_wrap([
-        html.H4(title, style={"color": TEXT_DARK, "marginTop": "0", "marginBottom": "14px"}),
-        dash_table.DataTable(
-            data=df.to_dict("records"),
-            columns=[{"name": c, "id": c} for c in df.columns],
-            style_header={"backgroundColor": RED, "color": "white", "fontWeight": "600", "border": "none"},
-            style_cell={"padding": "10px", "fontFamily": FONT_FAMILY, "border": "none",
-                        "borderBottom": "1px solid #f0e9e9"},
-            style_data={"backgroundColor": CARD_BG},
-            style_table={"overflowX": "auto"},
-            page_size=10,
+            className="payment-section",
         ),
-    ])
-
-
-def render_section(section):
-    kpis = section["kpis"]
-    kpi_row = html.Div(
-        [kpi_card(label, value, hero=(i == 0)) for i, (label, value) in enumerate(kpis)],
-        style={"display": "flex", "gap": "18px", "flexWrap": "wrap", "marginBottom": "22px"},
+        className="app-body-sidebar",
     )
-    charts = [card_wrap(dcc.Graph(figure=style_chart(fig, title), config={"displaylogo": False}))
-              for title, fig in section["charts"]]
-    tables = [data_table(title, df) for title, df in section["tables"]]
-    return html.Div([kpi_row, *charts, *tables])
 
 
-SECTIONS = fetch_all_sections()
+# ---------------------------------------------------------------------------
+# Data + app
+# ---------------------------------------------------------------------------
+
+SECTION_BY_KEY = {
+    "overview": fetch_business_overview(),
+    "customers": fetch_customer_insights(),
+    "operations": fetch_delivery_operations(),
+    "pipeline": fetch_pipeline_health(),
+}
+NOW = datetime.now().strftime("%b %d, %Y  %H:%M")
+
+TABS = [("overview", "Overview"), ("customers", "Customers"),
+        ("operations", "Operations"), ("pipeline", "Pipeline")]
+NAV_ITEMS = [("overview", "Dashboard", "grid"), ("customers", "Customers", "people"),
+             ("operations", "Operations", "flash"), ("pipeline", "Pipeline Health", "activity")]
 
 app = Dash(__name__, external_stylesheets=[
-    "https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap",
+    "https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@300;400;500;600;700&display=swap",
 ])
-app.title = "Zomato Data ETL Dashboard"
+app.title = "Zomato ETL Analytics"
 
-SIDEBAR = html.Div(
+HEADER = html.Header(
     [
-        html.Img(src="/assets/zomato_logo.svg", style={"width": "150px", "marginBottom": "40px"}),
-        dcc.Tabs(
-            id="tabs",
-            value=SECTIONS[0]["title"],
-            vertical=True,
-            children=[
-                dcc.Tab(
-                    label=s["title"], value=s["title"],
-                    style={
-                        "background": "transparent", "border": "none", "color": "#FFD8DC",
-                        "fontWeight": "600", "fontSize": "15px", "padding": "14px 12px",
-                        "textAlign": "left",
-                    },
-                    selected_style={
-                        "background": "rgba(255,255,255,0.16)", "border": "none", "color": "white",
-                        "fontWeight": "700", "fontSize": "15px", "padding": "14px 12px",
-                        "borderRadius": "10px", "textAlign": "left",
-                    },
-                )
-                for s in SECTIONS
-            ],
+        html.Div(
+            html.Div([
+                html.Img(src="/assets/zomato_logo.svg", className="logo-img", alt="Zomato"),
+                html.Span("ETL Analytics", className="logo-sub"),
+            ], className="logo"),
+            className="app-header-logo",
+        ),
+        html.Div(
+            html.Div([html.Button(lbl, id=f"tab-{key}", n_clicks=0) for key, lbl in TABS],
+                     className="tabs"),
+            className="app-header-navigation",
+        ),
+        html.Div(
+            html.Div([html.Span("@srummanf"), html.Span("SR", className="avatar")],
+                     className="user-profile"),
+            className="app-header-actions",
         ),
     ],
-    style={
-        "background": SIDEBAR_BG, "width": "240px", "minHeight": "100vh",
-        "padding": "30px 18px", "boxSizing": "border-box", "flexShrink": "0",
-    },
+    className="app-header",
 )
 
-TOPBAR = html.Div(
+NAV = html.Div(
     [
-        html.Div("Welcome back \U0001f44b", style={"fontSize": "22px", "fontWeight": "700", "color": TEXT_DARK}),
-        html.Div(f"Data as of {datetime.now().strftime('%B %d, %Y  %H:%M')}",
-                 style={"fontSize": "13px", "color": TEXT_MUTED, "marginTop": "4px"}),
+        html.Nav(
+            [
+                html.Button([icon(ic_name), html.Span(lbl)], id=f"nav-{key}", n_clicks=0,
+                            className="nav-link")
+                for key, lbl, ic_name in NAV_ITEMS
+            ],
+            className="navigation",
+        ),
+        html.Footer([
+            html.H1("Zomato"),
+            html.Div(["Zomato ETL Platform", html.Br(), "Analytics Dashboard", html.Br(),
+                      "Doris + Postgres"]),
+        ], className="footer"),
     ],
-    style={"marginBottom": "26px"},
+    className="app-body-navigation",
 )
 
 app.layout = html.Div(
-    [
-        SIDEBAR,
-        html.Div(
-            [TOPBAR, html.Div(id="tab-content")],
-            style={"flex": "1", "padding": "30px 34px", "minWidth": "0"},
-        ),
-    ],
-    style={"background": PAGE_BG, "minHeight": "100vh", "display": "flex", "fontFamily": FONT_FAMILY},
+    html.Div(
+        [
+            dcc.Store(id="active-tab", data="overview"),
+            HEADER,
+            html.Div(
+                [
+                    NAV,
+                    html.Div(id="main-content", className="app-body-main-content"),
+                    render_sidebar(),
+                ],
+                className="app-body",
+            ),
+        ],
+        className="app",
+    )
 )
 
 
-@app.callback(Output("tab-content", "children"), Input("tabs", "value"))
-def render_tab(selected_title):
-    section = next(s for s in SECTIONS if s["title"] == selected_title)
-    return render_section(section)
+@app.callback(
+    Output("active-tab", "data"),
+    [Input(f"tab-{key}", "n_clicks") for key, _ in TABS]
+    + [Input(f"nav-{key}", "n_clicks") for key, _, _ in NAV_ITEMS],
+    prevent_initial_call=True,
+)
+def pick_tab(*_):
+    triggered = ctx.triggered_id or ""
+    return triggered.replace("tab-", "").replace("nav-", "") or "overview"
+
+
+@app.callback(
+    [Output("main-content", "children")]
+    + [Output(f"tab-{key}", "className") for key, _ in TABS]
+    + [Output(f"nav-{key}", "className") for key, _, _ in NAV_ITEMS],
+    Input("active-tab", "data"),
+)
+def render_tab(active):
+    active = active or "overview"
+    tab_classes = ["active" if key == active else "" for key, _ in TABS]
+    nav_classes = ["nav-link active" if key == active else "nav-link"
+                   for key, _, _ in NAV_ITEMS]
+    return (render_main(active), *tab_classes, *nav_classes)
+
+
+@app.callback(
+    Output("sidebar-view", "data"),
+    Input("sidebar-etl", "n_clicks"),
+    Input("sidebar-dbt", "n_clicks"),
+    prevent_initial_call=True,
+)
+def pick_sidebar_view(*_):
+    return "dbt" if ctx.triggered_id == "sidebar-dbt" else "etl"
+
+
+@app.callback(
+    Output("sidebar-cards", "children"),
+    Output("sidebar-etl", "className"),
+    Output("sidebar-dbt", "className"),
+    Input("sidebar-view", "data"),
+)
+def render_sidebar_cards(view):
+    view = view or "etl"
+    etl_cls = "card-button active" if view == "etl" else "card-button"
+    dbt_cls = "card-button active" if view == "dbt" else "card-button"
+    return sidebar_cards(view), etl_cls, dbt_cls
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=False, port=8050)

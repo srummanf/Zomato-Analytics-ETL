@@ -5,15 +5,17 @@ An end-to-end, fully self-hosted analytics pipeline for a Zomato-style food-deli
 ![Python](https://img.shields.io/badge/python-3.11-blue?logo=python&logoColor=white)
 ![PySpark](https://img.shields.io/badge/pyspark-3.5.3-E25A1C?logo=apachespark&logoColor=white)
 ![dbt](https://img.shields.io/badge/dbt--core-1.8.8-FF694B?logo=dbt&logoColor=white)
-![Airflow](https://img.shields.io/badge/orchestration-Apache%20Airflow-017CEE?logo=apacheairflow&logoColor=white)
-![Apache Doris](https://img.shields.io/badge/Apache%20Doris-Analytics%20Warehouse-4D7CFE?logo=apache&logoColor=white)
 ![Apache Airflow](https://img.shields.io/badge/Apache%20Airflow-3.3.1-017CEE?logo=apacheairflow&logoColor=white)
-![Docker Compose](https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white)
+![Apache Doris](https://img.shields.io/badge/Apache%20Doris-Analytics%20Warehouse-4D7CFE?logo=apache&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
 ![Metabase](https://img.shields.io/badge/Metabase-BI-509EE3?logo=metabase&logoColor=white)
-![Plotly](https://img.shields.io/badge/Plotly-Visualization-3F4F75?logo=plotly&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker%20Compose-2496ED?logo=docker&logoColor=white)
+![Plotly](https://img.shields.io/badge/Plotly-Dash-3F4F75?logo=plotly&logoColor=white)
+![Docker Compose](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
 ![dbt tests](https://img.shields.io/badge/dbt%20tests-37%2F37%20passing-brightgreen)
+
+![Zomato ETL Analytics — the local Plotly Dash dashboard, Overview page](image/README/dashboard-overview.png)
+
+<sub>The bundled Plotly Dash frontend (`10_dash_dashboard.py`) — same data as the Metabase dashboards, Zomato-red theme. See [Demo](#demo).</sub>
 
 ## Description
 
@@ -176,7 +178,7 @@ Full rationale for each choice (why Doris over Snowflake, why dbt over Great Exp
 - PySpark transformation: type cleaning, explode of multi-valued `cuisines`, and a UDF that parses Kaggle's real stringified `reviews_list` into actual review rows
 - A dbt-built star schema (5 fact tables, 7 dimension tables, 1 bridge table) with 37 automated `not_null`/`unique`/`relationships` tests
 - A full daily Airflow DAG wiring generation → validation → transform → load → model → test → warehouse-load into one run
-- Two interchangeable dashboards over the same data: 4-page Metabase BI dashboard, and a standalone Zomato-branded Plotly Dash app
+- Two interchangeable dashboards over the same data: 4-page Metabase BI dashboard, and a standalone Zomato-red Plotly Dash app (Eva icons, live Pipeline Health sidebar)
 - A "Pipeline Health" page fed by the pipeline's own run metadata (rejection rates, dbt test pass rates over time) — the pipeline monitors itself
 
 ## Architecture
@@ -233,7 +235,7 @@ data etl/
 ├── 08_load_doris.py                # Step 8 — Stream Load star schema into Doris
 ├── 09_dag.py                       # Step 9 — single Airflow DAG wiring steps 2,4-8
 ├── 10_dash_dashboard.py            # standalone local Plotly Dash frontend (not in the DAG)
-├── assets/                         # Dash static assets (the Zomato logo SVG)
+├── assets/                         # Dash static assets — Zomato logo SVG, style.css, icons/ (Eva icons)
 ├── dbt_project/                    # Step 7 — dbt models (dims/facts) + tests
 │   ├── dbt_project.yml
 │   ├── profiles.yml
@@ -421,15 +423,28 @@ Steps 1 and 3 (`01_download_data.py`, `03_profile_data.py`) are meant to be run 
 
 **Metabase** — open `http://localhost:3030` after `docker compose up -d`. Four dashboards live under **Our analytics**: Business Overview, Customer Insights, Delivery & Operations, Pipeline Health.
 
-**Local Plotly Dash app (alternative, no Docker/login needed)** — `10_dash_dashboard.py` is a standalone frontend that reads the same Doris/Postgres tables and shows the same four pages in a custom Zomato-branded UI (red sidebar, real Zomato logo, Poppins font):
+**Local Plotly Dash app (alternative, no Metabase login needed)** — `10_dash_dashboard.py` is a standalone frontend that reads the same Doris/Postgres tables and shows the same four pages in a custom "Zomato ETL Analytics" UI: a **Zomato-red theme** on a warm three-column shell (left nav + top tabs both switch between Overview / Customers / Operations / Pipeline; Pipeline Health also stays pinned as a live right sidebar with an ETL⇄DBT toggle), Be Vietnam Pro type, the Zomato wordmark, and [Eva icons](https://iconer.app/evaicons/) (`assets/icons/*.svg`, tinted via CSS masks — no emoji). The component layout follows [`doc/COMPONENTS.md`](doc/COMPONENTS.md); the styles live in `assets/style.css`. It still needs the `doris` and `postgres` containers up, since that's where it reads from.
+
+Quick demo, from the repo root:
 
 ```bash
-pip install dash plotly
+# 1. Start the data backends the dashboard reads from
+docker compose up -d postgres doris
+docker compose ps                       # wait for both to be healthy
+
+# 2. Activate the project venv (dash/plotly already installed there)
+.venv/Scripts/activate                  # Windows
+# source .venv/bin/activate             # macOS/Linux
+# first time only, if not using the venv: pip install dash plotly
+
+# 3. Run the dashboard
 python 10_dash_dashboard.py
 # then open http://127.0.0.1:8050
 ```
 
-See [`doc/DASHBOARD.md`](doc/DASHBOARD.md#alternative-frontend--the-local-plotly-dash-dashboard) for what it looks like, and [`doc/WALKTHROUGH.md`](doc/WALKTHROUGH.md) step 13 for more detail.
+If Doris/Postgres have no data yet, run the pipeline once (see [Run it end to end](#run-it-end-to-end)) before the charts populate.
+
+The screenshot at the top of this README is the Overview page. See [`doc/DASHBOARD.md`](doc/DASHBOARD.md#alternative-frontend--the-local-plotly-dash-dashboard) for a walkthrough of every page, and [`doc/WALKTHROUGH.md`](doc/WALKTHROUGH.md) step 13 for more detail.
 
 ## Every script, explained
 
